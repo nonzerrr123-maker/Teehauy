@@ -27,16 +27,20 @@ export default function DreamApp() {
   const [interpretError, setInterpretError] = useState<string | null>(null);
 
   useEffect(() => {
-    try {
-      const history = localStorage.getItem("teehauy:history");
-      const favs = localStorage.getItem("teehauy:favorites");
-      if (history) setSavedResults(JSON.parse(history) as DreamResult[]);
-      if (favs) setFavorites(JSON.parse(favs) as DreamResult[]);
-    } catch {
-      // Ignore malformed prototype data and keep safe defaults.
-    } finally {
-      setHydrated(true);
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        const history = localStorage.getItem("teehauy:history");
+        const favs = localStorage.getItem("teehauy:favorites");
+        if (history) setSavedResults(JSON.parse(history) as DreamResult[]);
+        if (favs) setFavorites(JSON.parse(favs) as DreamResult[]);
+      } catch {
+        // Ignore malformed prototype data and keep safe defaults.
+      } finally {
+        setHydrated(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
