@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isDatabaseConfigured, saveDreamInterpretation } from "@/lib/db";
 import { interpretDream } from "@/lib/dream-engine";
-import { readGuestHash } from "@/lib/guest-identity";
+import { resolveRequestOwner } from "@/lib/request-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET() {
     {
       ok: true,
       service: "teehauy-dream-interpretation",
-      version: 2,
+      version: 3,
       databaseConfigured: isDatabaseConfigured(),
     },
     { headers: { "Cache-Control": "no-store" } },
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   let result = interpretDream(dreamText);
   let persisted = false;
-  const ownerHash = readGuestHash(request);
+  const { ownerHash, authenticated } = await resolveRequestOwner(request);
 
   if (ownerHash && isDatabaseConfigured()) {
     try {
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { ok: true, result, persisted },
+    { ok: true, result, persisted, authenticated },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
