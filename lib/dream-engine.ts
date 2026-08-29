@@ -5,6 +5,7 @@ export type NumberItem = {
 };
 
 export type DreamResult = {
+  id?: string;
   dreamText: string;
   numbers: NumberItem[];
   meaning: string;
