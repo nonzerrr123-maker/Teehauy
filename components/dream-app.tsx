@@ -9,18 +9,36 @@ import { HomePage } from "@/components/dream/home-page";
 import { ProfilePage } from "@/components/dream/profile-page";
 import { ResultsPage } from "@/components/dream/results-page";
 import { StatsPage } from "@/components/dream/stats-page";
-import { defaultHistory } from "@/lib/dream-catalog";
+import { getOrCreateGuestToken } from "@/lib/browser-guest";
 import { interpretDream, type DreamResult } from "@/lib/dream-engine";
 
 type InterpretApiResponse =
-  | { ok: true; result: DreamResult }
+  | { ok: true; result: DreamResult; persisted?: boolean }
   | { ok: false; error: string; message: string };
+
+type HistoryApiResponse =
+  | { ok: true; history: DreamResult[]; favorites: DreamResult[] }
+  | { ok: false; error: string; message: string };
+
+function sameResult(a: DreamResult, b: DreamResult): boolean {
+  if (a.id && b.id) return a.id === b.id;
+  return a.dreamText === b.dreamText && a.date === b.date;
+}
+
+function mergeResults(primary: DreamResult[], secondary: DreamResult[], limit = 100): DreamResult[] {
+  const merged: DreamResult[] = [];
+  for (const item of [...primary, ...secondary]) {
+    if (!merged.some((existing) => sameResult(existing, item))) merged.push(item);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}
 
 export default function DreamApp() {
   const [activeTab, setActiveTab] = useState<DreamTab>("home");
   const [showResults, setShowResults] = useState(false);
   const [currentResult, setCurrentResult] = useState<DreamResult | null>(null);
-  const [savedResults, setSavedResults] = useState<DreamResult[]>(defaultHistory);
+  const [savedResults, setSavedResults] = useState<DreamResult[]>([]);
   const [favorites, setFavorites] = useState<DreamResult[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
@@ -28,16 +46,37 @@ export default function DreamApp() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      let localHistory: DreamResult[] = [];
+      let localFavorites: DreamResult[] = [];
+
       try {
         const history = localStorage.getItem("teehauy:history");
         const favs = localStorage.getItem("teehauy:favorites");
-        if (history) setSavedResults(JSON.parse(history) as DreamResult[]);
-        if (favs) setFavorites(JSON.parse(favs) as DreamResult[]);
+        if (history) localHistory = JSON.parse(history) as DreamResult[];
+        if (favs) localFavorites = JSON.parse(favs) as DreamResult[];
       } catch {
-        // Ignore malformed prototype data and keep safe defaults.
-      } finally {
-        setHydrated(true);
+        // Ignore malformed legacy data.
       }
+
+      setSavedResults(localHistory);
+      setFavorites(localFavorites);
+      setHydrated(true);
+
+      const guestToken = getOrCreateGuestToken();
+      void fetch("/api/dream/history", {
+        method: "GET",
+        headers: { "x-teehauy-guest": guestToken },
+        cache: "no-store",
+      })
+        .then(async (response) => ({ response, payload: (await response.json()) as HistoryApiResponse }))
+        .then(({ response, payload }) => {
+          if (!response.ok || !payload.ok) return;
+          setSavedResults((current) => mergeResults(payload.history, current, 30));
+          setFavorites((current) => mergeResults(payload.favorites, current, 100));
+        })
+        .catch(() => {
+          // Local persistence remains available when the database is offline.
+        });
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -63,9 +102,13 @@ export default function DreamApp() {
     let result: DreamResult;
 
     try {
+      const guestToken = getOrCreateGuestToken();
       const response = await fetch("/api/dream/interpret", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-teehauy-guest": guestToken,
+        },
         body: JSON.stringify({ dreamText: normalized }),
         cache: "no-store",
       });
@@ -77,8 +120,6 @@ export default function DreamApp() {
 
       result = payload.result;
     } catch {
-      // Keep the app usable while the server/API is temporarily unavailable.
-      // This fallback can be removed after persistent backend + monitoring are online.
       result = interpretDream(normalized);
       setInterpretError("เชื่อมต่อระบบตีความไม่ได้ชั่วคราว จึงใช้โหมดสำรองบนอุปกรณ์นี้");
     } finally {
@@ -88,20 +129,40 @@ export default function DreamApp() {
     setCurrentResult(result);
     setShowResults(true);
     setActiveTab("home");
-    setSavedResults((prev) => [result, ...prev].slice(0, 30));
+    setSavedResults((prev) => mergeResults([result], prev, 30));
   }, []);
 
-  const toggleFavorite = useCallback((result: DreamResult) => {
+  const toggleFavorite = useCallback(async (result: DreamResult) => {
+    let shouldFavorite = true;
+
     setFavorites((prev) => {
-      const exists = prev.some((item) => item.dreamText === result.dreamText && item.date === result.date);
+      const exists = prev.some((item) => sameResult(item, result));
+      shouldFavorite = !exists;
       return exists
-        ? prev.filter((item) => !(item.dreamText === result.dreamText && item.date === result.date))
-        : [result, ...prev];
+        ? prev.filter((item) => !sameResult(item, result))
+        : mergeResults([result], prev, 100);
     });
+
+    if (!result.id) return;
+
+    try {
+      const guestToken = getOrCreateGuestToken();
+      await fetch("/api/dream/favorite", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-teehauy-guest": guestToken,
+        },
+        body: JSON.stringify({ interpretationId: result.id, favorite: shouldFavorite }),
+        cache: "no-store",
+      });
+    } catch {
+      // Optimistic local favorite state remains usable offline.
+    }
   }, []);
 
   const isFavorite = useCallback(
-    (result: DreamResult) => favorites.some((item) => item.dreamText === result.dreamText && item.date === result.date),
+    (result: DreamResult) => favorites.some((item) => sameResult(item, result)),
     [favorites],
   );
 
@@ -124,7 +185,7 @@ export default function DreamApp() {
           <ResultsPage
             result={currentResult}
             favorite={isFavorite(currentResult)}
-            onFavorite={() => toggleFavorite(currentResult)}
+            onFavorite={() => void toggleFavorite(currentResult)}
             onBack={() => {
               setShowResults(false);
               setInterpretError(null);
@@ -141,7 +202,7 @@ export default function DreamApp() {
             results={savedResults}
             favorites={favorites}
             isFavorite={isFavorite}
-            onFavorite={toggleFavorite}
+            onFavorite={(result) => void toggleFavorite(result)}
             onInterpret={handleInterpret}
             isLoading={isInterpreting}
           />
