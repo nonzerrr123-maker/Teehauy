@@ -2,9 +2,21 @@
 
 import { useEffect, useState } from "react";
 
+type HealthResponse = {
+  persistenceMode?: "database" | "local-fallback";
+  database?: {
+    configured?: boolean;
+    reachable?: boolean;
+    schemaReady?: boolean;
+  };
+};
+
+type SystemStatus = "checking" | "database" | "schema-missing" | "database-offline" | "local";
+
 export function ProfilePage({ historyCount, favoriteCount }: { historyCount: number; favoriteCount: number }) {
   const [name, setName] = useState("นักตีเลข");
   const [editing, setEditing] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus>("checking");
   const [notifications, setNotifications] = useState<Record<string, boolean>>({
     lottery_day: true,
     result: true,
@@ -25,6 +37,25 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
           // Keep defaults when old local data is malformed.
         }
       }
+
+      void fetch("/api/health", { cache: "no-store" })
+        .then((response) => response.json() as Promise<HealthResponse>)
+        .then((health) => {
+          if (health.persistenceMode === "database" && health.database?.schemaReady) {
+            setSystemStatus("database");
+            return;
+          }
+          if (!health.database?.configured) {
+            setSystemStatus("local");
+            return;
+          }
+          if (!health.database?.reachable) {
+            setSystemStatus("database-offline");
+            return;
+          }
+          setSystemStatus("schema-missing");
+        })
+        .catch(() => setSystemStatus("database-offline"));
     }, 0);
 
     return () => window.clearTimeout(timer);
@@ -82,13 +113,15 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
           <p className="mt-1 text-xs text-[#4a5060]">นักทำนายแห่งโชคชะตา</p>
         </div>
 
-        <div className="glass-card mb-5 grid grid-cols-3 gap-2 rounded-2xl p-3 text-center">
+        <div className="glass-card mb-3 grid grid-cols-3 gap-2 rounded-2xl p-3 text-center">
           <ProfileStat label="ตีเลขแล้ว" value={historyCount} unit="ครั้ง" />
           <ProfileStat label="รายการโปรด" value={favoriteCount} unit="รายการ" />
-          <ProfileStat label="เวอร์ชัน" value="1.1" unit="API" />
+          <ProfileStat label="เวอร์ชัน" value="2.0" unit="API" />
         </div>
 
-        <h2 className="mb-3 font-[Cinzel] text-[11px] font-semibold uppercase tracking-[.18em] text-[#a8b8cc]">การแจ้งเตือน</h2>
+        <SystemStatusCard status={systemStatus} />
+
+        <h2 className="mb-3 mt-5 font-[Cinzel] text-[11px] font-semibold uppercase tracking-[.18em] text-[#a8b8cc]">การแจ้งเตือน</h2>
         <div className="mb-6 flex flex-col gap-2">
           {notificationItems.map((item) => (
             <div key={item.id} className="glass-card flex items-center justify-between gap-3 rounded-2xl p-3.5">
@@ -114,7 +147,7 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
 
         <h2 className="mb-2 font-[Cinzel] text-[11px] font-semibold uppercase tracking-[.18em] text-[#a8b8cc]">ตั้งค่า</h2>
         <div className="divide-y divide-[#a8b8cc0f]">
-          {["🌙  ธีมกลางคืน · เปิดใช้งาน", "🗣️  ภาษา · ไทย", "📋  แหล่งผลสถิติ · รอเชื่อม", "🔒  นโยบายความเป็นส่วนตัว", "ℹ️  เกี่ยวกับ Teehauy · 1.1.0"].map((item) => (
+          {["🌙  ธีมกลางคืน · เปิดใช้งาน", "🗣️  ภาษา · ไทย", "📋  แหล่งผลสถิติ · รอเชื่อม", "🔒  นโยบายความเป็นส่วนตัว", "ℹ️  เกี่ยวกับ Teehauy · 2.0.0"].map((item) => (
             <div key={item} className="flex items-center justify-between px-1 py-3 text-sm text-[#a8b8cc]">
               <span>{item}</span><span className="text-[#333847]">›</span>
             </div>
@@ -126,6 +159,29 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
         </p>
       </div>
     </section>
+  );
+}
+
+function SystemStatusCard({ status }: { status: SystemStatus }) {
+  const content: Record<SystemStatus, { icon: string; title: string; description: string; tone: string }> = {
+    checking: { icon: "◌", title: "กำลังตรวจสอบระบบ", description: "กำลังเช็ก API และพื้นที่จัดเก็บข้อมูล", tone: "text-[#a8b8cc]" },
+    database: { icon: "✓", title: "Database Sync พร้อม", description: "ประวัติและรายการโปรดกำลังซิงก์กับฐานข้อมูล", tone: "text-[#80d0c0]" },
+    local: { icon: "◇", title: "Local Fallback", description: "ยังไม่ได้ตั้ง DATABASE_URL ข้อมูลจึงเก็บในเบราว์เซอร์", tone: "text-[#d9c678]" },
+    "schema-missing": { icon: "!", title: "Database ยังไม่พร้อม", description: "เชื่อมฐานได้แล้ว แต่ยังต้อง apply migration schema", tone: "text-[#ffb36b]" },
+    "database-offline": { icon: "×", title: "Database ติดต่อไม่ได้", description: "แอปยังทำงานต่อด้วย local fallback", tone: "text-[#ff8060]" },
+  };
+  const item = content[status];
+
+  return (
+    <div className="glass-card flex items-center gap-3 rounded-2xl p-3.5">
+      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-current bg-[#0d0d18] font-bold ${item.tone}`}>
+        {item.icon}
+      </span>
+      <span className="min-w-0">
+        <strong className={`block text-sm ${item.tone}`}>{item.title}</strong>
+        <span className="mt-0.5 block text-[11px] leading-4 text-[#596071]">{item.description}</span>
+      </span>
+    </div>
   );
 }
 
