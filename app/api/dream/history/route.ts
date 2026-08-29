@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 
 import { isDatabaseConfigured, listDreamFavorites, listDreamHistory } from "@/lib/db";
-import { readGuestHash } from "@/lib/guest-identity";
+import { resolveRequestOwner } from "@/lib/request-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const ownerHash = readGuestHash(request);
+  const { ownerHash, authenticated } = await resolveRequestOwner(request);
 
   if (!ownerHash) {
     return NextResponse.json(
-      { ok: false, error: "GUEST_TOKEN_REQUIRED", message: "ไม่พบตัวระบุอุปกรณ์" },
+      { ok: false, error: "OWNER_REQUIRED", message: "ไม่พบตัวระบุบัญชีหรืออุปกรณ์" },
       { status: 401 },
     );
   }
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     ]);
 
     return NextResponse.json(
-      { ok: true, history, favorites },
+      { ok: true, history, favorites, authenticated },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
