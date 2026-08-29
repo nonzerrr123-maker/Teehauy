@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
+import { isDatabaseConfigured, saveDreamInterpretation } from "@/lib/db";
 import { interpretDream } from "@/lib/dream-engine";
+import { readGuestHash } from "@/lib/guest-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +16,8 @@ export async function GET() {
     {
       ok: true,
       service: "teehauy-dream-interpretation",
-      version: 1,
+      version: 2,
+      databaseConfigured: isDatabaseConfigured(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );
@@ -52,10 +55,21 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = interpretDream(dreamText);
+  let result = interpretDream(dreamText);
+  let persisted = false;
+  const ownerHash = readGuestHash(request);
+
+  if (ownerHash && isDatabaseConfigured()) {
+    try {
+      result = await saveDreamInterpretation(ownerHash, result);
+      persisted = true;
+    } catch (error) {
+      console.error("Failed to persist dream interpretation", error);
+    }
+  }
 
   return NextResponse.json(
-    { ok: true, result },
+    { ok: true, result, persisted },
     { headers: { "Cache-Control": "no-store" } },
   );
 }
