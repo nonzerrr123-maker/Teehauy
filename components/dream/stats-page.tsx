@@ -1,39 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-const sampleLotteryData = [
-  { date: "01 ส.ค.", first: "593174", top: "74", bottom: "47" },
-  { date: "16 ส.ค.", first: "827459", top: "59", bottom: "95" },
-  { date: "01 ก.ค.", first: "341862", top: "62", bottom: "26" },
-  { date: "16 ก.ค.", first: "905237", top: "37", bottom: "73" },
-  { date: "01 มิ.ย.", first: "764823", top: "23", bottom: "32" },
-  { date: "16 มิ.ย.", first: "128456", top: "56", bottom: "65" },
-];
+import type { LotteryStats } from "@/lib/lottery-provider";
 
-const digitFrequency = [
-  { digit: "0", count: 18 },
-  { digit: "1", count: 22 },
-  { digit: "2", count: 19 },
-  { digit: "3", count: 25 },
-  { digit: "4", count: 21 },
-  { digit: "5", count: 30 },
-  { digit: "6", count: 17 },
-  { digit: "7", count: 28 },
-  { digit: "8", count: 23 },
-  { digit: "9", count: 15 },
-];
+type StatsApiResponse = {
+  ok: boolean;
+  stats?: LotteryStats;
+};
 
 export function StatsPage() {
   const [view, setView] = useState<"table" | "chart">("table");
+  const [stats, setStats] = useState<LotteryStats | null>(null);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    void fetch("/api/lottery/stats", { cache: "no-store" })
+      .then(async (response) => ({ response, payload: (await response.json()) as StatsApiResponse }))
+      .then(({ response, payload }) => {
+        if (!response.ok || !payload.ok || !payload.stats) throw new Error("LOTTERY_STATS_UNAVAILABLE");
+        setStats(payload.stats);
+        setLoadError(false);
+      })
+      .catch(() => setLoadError(true));
+  }, []);
+
+  const sourceText = stats?.source === "external"
+    ? stats.sourceLabel
+    : stats?.sourceLabel ?? "กำลังโหลดข้อมูล...";
 
   return (
     <section className="fade-up flex h-full flex-col">
       <header className="shrink-0 px-5 pb-4 pt-10">
-        <h1 className="gold-text font-[Cinzel] text-xl font-bold">สถิติหวยย้อนหลัง</h1>
-        <p className="mb-4 mt-1 text-xs text-[#6b7585]">ข้อมูลตัวอย่าง 6 งวด · รอเชื่อม API ผลรางวัลจริง</p>
-        <div className="segmented flex rounded-xl p-1">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="gold-text font-[Cinzel] text-xl font-bold">สถิติหวยย้อนหลัง</h1>
+            <p className="mt-1 text-xs text-[#6b7585]">{sourceText}</p>
+          </div>
+          {stats ? (
+            <span className={`mt-1 shrink-0 rounded-full border px-2 py-1 text-[9px] ${stats.source === "external" ? "border-[#80d0c044] text-[#80d0c0]" : "border-[#c9a84c44] text-[#d9c678]"}`}>
+              {stats.source === "external" ? "LIVE SOURCE" : "SAMPLE"}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="segmented mt-4 flex rounded-xl p-1">
           <button type="button" data-active={view === "table"} onClick={() => setView("table")} className="flex-1 rounded-lg border border-transparent py-2 text-sm text-[#6b7585]">
             ⊞ ตาราง
           </button>
@@ -44,13 +56,21 @@ export function StatsPage() {
       </header>
 
       <div className="scroll-area flex-1 px-5 pb-5">
-        {view === "table" ? (
+        {loadError ? (
+          <div className="glass-card mb-4 rounded-2xl border-[#ff806033] p-4 text-sm text-[#ff9d88]">
+            โหลดสถิติไม่สำเร็จในขณะนี้ กรุณาลองใหม่ภายหลัง
+          </div>
+        ) : null}
+
+        {!stats && !loadError ? <StatsSkeleton /> : null}
+
+        {stats && view === "table" ? (
           <div className="glass-card mb-5 overflow-hidden rounded-2xl">
             <div className="grid grid-cols-4 border-b border-[#c9a84c22] bg-[#1a1a2acc] px-3 py-2.5 text-center text-[9px] text-[#a8b8cc]">
               <span>งวด</span><span>รางวัลที่ 1</span><span>2 ตัวบน</span><span>2 ตัวล่าง</span>
             </div>
-            {sampleLotteryData.map((row) => (
-              <div key={row.date} className="grid grid-cols-4 items-center border-b border-[#a8b8cc0d] px-3 py-3 text-center text-xs last:border-0">
+            {stats.draws.map((row, index) => (
+              <div key={`${row.date}-${index}`} className="grid grid-cols-4 items-center border-b border-[#a8b8cc0d] px-3 py-3 text-center text-xs last:border-0">
                 <span className="text-[#6b7585]">{row.date}</span>
                 <span className="font-[Cinzel] text-[11px] text-[#c8d4e0]">{row.first}</span>
                 <span className="font-[Cinzel] font-bold text-[#f0c040]">{row.top}</span>
@@ -58,12 +78,14 @@ export function StatsPage() {
               </div>
             ))}
           </div>
-        ) : (
+        ) : null}
+
+        {stats && view === "chart" ? (
           <div className="glass-card mb-5 rounded-2xl p-3 pt-5">
-            <p className="mb-4 px-1 text-xs text-[#a8b8cc]">ความถี่ตัวเลขจากชุดข้อมูลตัวอย่าง</p>
+            <p className="mb-4 px-1 text-xs text-[#a8b8cc]">ความถี่ตัวเลขจากข้อมูลที่โหลดได้</p>
             <div className="h-56 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={digitFrequency} margin={{ top: 8, right: 2, left: -25, bottom: 0 }}>
+                <BarChart data={stats.digitFrequency} margin={{ top: 8, right: 2, left: -25, bottom: 0 }}>
                   <XAxis dataKey="digit" axisLine={false} tickLine={false} />
                   <YAxis axisLine={false} tickLine={false} />
                   <Tooltip
@@ -75,17 +97,34 @@ export function StatsPage() {
               </ResponsiveContainer>
             </div>
           </div>
-        )}
+        ) : null}
 
-        <div className="grid grid-cols-2 gap-3">
-          <StatNumbers title="เลขร้อน" icon="🔥" values={["74", "56", "35", "89", "27", "91"]} />
-          <StatNumbers title="เลขเย็น" icon="❄️" values={["03", "68", "14", "50", "82", "37"]} muted />
-        </div>
-        <p className="mt-4 text-[10px] leading-4 text-[#454b5a]">
-          หมายเหตุ: ข้อมูลในหน้านี้เป็นข้อมูลตัวอย่างสำหรับทดสอบ UI เท่านั้น และไม่ใช่ผลรางวัลจริง
-        </p>
+        {stats ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <StatNumbers title="เลขที่พบบ่อย" icon="🔥" values={stats.hotNumbers} />
+              <StatNumbers title="เลขที่พบน้อย" icon="❄️" values={stats.coldNumbers} muted />
+            </div>
+            <p className="mt-4 text-[10px] leading-4 text-[#454b5a]">
+              {stats.source === "sample"
+                ? "หมายเหตุ: ตอนนี้ provider ยังใช้ข้อมูลตัวอย่างเพื่อทดสอบ UI ไม่ใช่ผลรางวัลจริง"
+                : "สถิติคำนวณจากข้อมูลที่ provider ส่งมา ไม่ใช่การทำนายผลรางวัลในอนาคต"}
+            </p>
+          </>
+        ) : null}
       </div>
     </section>
+  );
+}
+
+function StatsSkeleton() {
+  return (
+    <div className="glass-card mb-5 rounded-2xl p-4">
+      <div className="mb-3 h-3 w-28 animate-pulse rounded bg-[#252536]" />
+      <div className="space-y-3">
+        {[1, 2, 3, 4].map((item) => <div key={item} className="h-8 animate-pulse rounded-xl bg-[#171725]" />)}
+      </div>
+    </div>
   );
 }
 
