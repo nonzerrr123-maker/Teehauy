@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AccountProfilePage } from "@/components/dream/account-profile-page";
 import { BottomNav, StarsBackground, type DreamTab } from "@/components/dream/common";
 import { DictionaryPage } from "@/components/dream/dictionary-page";
 import { HistoryPage } from "@/components/dream/history-page";
 import { HomePage } from "@/components/dream/home-page";
-import { ProfilePage } from "@/components/dream/profile-page";
 import { ResultsPage } from "@/components/dream/results-page";
 import { StatsPage } from "@/components/dream/stats-page";
 import { getOrCreateGuestToken } from "@/lib/browser-guest";
@@ -208,7 +208,7 @@ export default function DreamApp() {
         ) : null}
 
         {activeTab === "stats" ? <StatsPage /> : null}
-        {activeTab === "profile" ? <ProfilePage historyCount={savedResults.length} favoriteCount={favorites.length} /> : null}
+        {activeTab === "profile" ? <AccountProfilePage historyCount={savedResults.length} favoriteCount={favorites.length} /> : null}
       </div>
 
       <BottomNav activeTab={activeTab} onChange={changeTab} />
