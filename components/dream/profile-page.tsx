@@ -2,6 +2,13 @@
 
 import { useEffect, useState } from "react";
 
+import {
+  getNotificationStatus,
+  requestNotificationPermission,
+  showTestNotification,
+  type BrowserNotificationStatus,
+} from "@/lib/browser-notifications";
+
 type HealthResponse = {
   persistenceMode?: "database" | "local-fallback";
   database?: {
@@ -13,29 +20,41 @@ type HealthResponse = {
 
 type SystemStatus = "checking" | "database" | "schema-missing" | "database-offline" | "local";
 
+const defaultNotifications: Record<string, boolean> = {
+  lottery_day: false,
+  result: false,
+  lucky_tip: false,
+  dream_remind: false,
+  hot_numbers: false,
+};
+
 export function ProfilePage({ historyCount, favoriteCount }: { historyCount: number; favoriteCount: number }) {
   const [name, setName] = useState("นักตีเลข");
   const [editing, setEditing] = useState(false);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>("checking");
-  const [notifications, setNotifications] = useState<Record<string, boolean>>({
-    lottery_day: true,
-    result: true,
-    lucky_tip: false,
-    dream_remind: true,
-    hot_numbers: false,
-  });
+  const [notificationStatus, setNotificationStatus] = useState<BrowserNotificationStatus>("checking");
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Record<string, boolean>>(defaultNotifications);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const permission = getNotificationStatus();
+      setNotificationStatus(permission);
+
       const savedName = localStorage.getItem("teehauy:name");
       const savedNotifications = localStorage.getItem("teehauy:notifications");
       if (savedName) setName(savedName);
-      if (savedNotifications) {
+      if (savedNotifications && permission === "granted") {
         try {
-          setNotifications(JSON.parse(savedNotifications) as Record<string, boolean>);
+          setNotifications({
+            ...defaultNotifications,
+            ...(JSON.parse(savedNotifications) as Record<string, boolean>),
+          });
         } catch {
-          // Keep defaults when old local data is malformed.
+          // Keep safe defaults when old local data is malformed.
         }
+      } else if (permission !== "granted") {
+        localStorage.setItem("teehauy:notifications", JSON.stringify(defaultNotifications));
       }
 
       void fetch("/api/health", { cache: "no-store" })
@@ -61,12 +80,54 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
     return () => window.clearTimeout(timer);
   }, []);
 
-  const updateNotification = (id: string) => {
-    setNotifications((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem("teehauy:notifications", JSON.stringify(next));
-      return next;
-    });
+  const persistNotifications = (next: Record<string, boolean>) => {
+    setNotifications(next);
+    localStorage.setItem("teehauy:notifications", JSON.stringify(next));
+  };
+
+  const enableBrowserNotifications = async (): Promise<boolean> => {
+    const permission = await requestNotificationPermission();
+    setNotificationStatus(permission);
+
+    if (permission === "granted") {
+      setNotificationMessage("อนุญาตการแจ้งเตือนแล้ว เลือกประเภทที่ต้องการได้เลย");
+      return true;
+    }
+
+    if (permission === "denied") {
+      setNotificationMessage("เบราว์เซอร์บล็อกการแจ้งเตือนอยู่ ต้องเปิดสิทธิ์จากการตั้งค่าเว็บไซต์ก่อน");
+    } else if (permission === "unsupported") {
+      setNotificationMessage("เบราว์เซอร์นี้ไม่รองรับ Web Notification");
+    } else {
+      setNotificationMessage("ยังไม่ได้อนุญาตการแจ้งเตือน");
+    }
+    return false;
+  };
+
+  const updateNotification = async (id: string) => {
+    const turningOn = !notifications[id];
+
+    if (turningOn && notificationStatus !== "granted") {
+      const granted = await enableBrowserNotifications();
+      if (!granted) return;
+    }
+
+    const next = { ...notifications, [id]: turningOn };
+    persistNotifications(next);
+    setNotificationMessage(
+      turningOn
+        ? "บันทึกความต้องการแจ้งเตือนแล้ว ระบบ push ตามเวลาจะเปิดเมื่อ backend scheduler พร้อม"
+        : "ปิดความต้องการแจ้งเตือนรายการนี้แล้ว",
+    );
+  };
+
+  const testNotification = () => {
+    const shown = showTestNotification();
+    setNotificationMessage(
+      shown
+        ? "ส่งการแจ้งเตือนทดสอบแล้ว"
+        : "ส่งการแจ้งเตือนทดสอบไม่ได้ กรุณาตรวจสิทธิ์ของเบราว์เซอร์",
+    );
   };
 
   const saveName = () => {
@@ -77,11 +138,11 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
   };
 
   const notificationItems = [
-    { id: "lottery_day", icon: "🔔", label: "แจ้งเตือนวันงวดหวย", desc: "ก่อนวันออกรางวัล 1 วัน" },
-    { id: "result", icon: "🎯", label: "ผลรางวัลออกแล้ว", desc: "เตรียมไว้สำหรับเชื่อมข้อมูลจริง" },
-    { id: "lucky_tip", icon: "✨", label: "เคล็ดลับโชคดีรายวัน", desc: "ทุกวันเวลา 07:00 น." },
-    { id: "dream_remind", icon: "🌙", label: "เตือนบันทึกความฝัน", desc: "ทุกเช้าเวลา 06:30 น." },
-    { id: "hot_numbers", icon: "🔥", label: "เลขร้อนประจำงวด", desc: "7 วันก่อนออกรางวัล" },
+    { id: "lottery_day", icon: "🔔", label: "แจ้งเตือนวันงวดหวย", desc: "ต้องการรับการเตือนก่อนวันออกรางวัล" },
+    { id: "result", icon: "🎯", label: "ผลรางวัลออกแล้ว", desc: "ต้องการรับการเตือนเมื่อ provider มีผลใหม่" },
+    { id: "lucky_tip", icon: "✨", label: "เคล็ดลับโชคดีรายวัน", desc: "ความต้องการรับคอนเทนต์รายวัน" },
+    { id: "dream_remind", icon: "🌙", label: "เตือนบันทึกความฝัน", desc: "ความต้องการรับการเตือนช่วงเช้า" },
+    { id: "hot_numbers", icon: "🔥", label: "สถิติก่อนวันออกรางวัล", desc: "ความต้องการรับสรุปสถิติก่อนงวด" },
   ];
 
   return (
@@ -116,12 +177,23 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
         <div className="glass-card mb-3 grid grid-cols-3 gap-2 rounded-2xl p-3 text-center">
           <ProfileStat label="ตีเลขแล้ว" value={historyCount} unit="ครั้ง" />
           <ProfileStat label="รายการโปรด" value={favoriteCount} unit="รายการ" />
-          <ProfileStat label="เวอร์ชัน" value="2.0" unit="API" />
+          <ProfileStat label="เวอร์ชัน" value="2.1" unit="API" />
         </div>
 
         <SystemStatusCard status={systemStatus} />
 
         <h2 className="mb-3 mt-5 font-[Cinzel] text-[11px] font-semibold uppercase tracking-[.18em] text-[#a8b8cc]">การแจ้งเตือน</h2>
+        <NotificationPermissionCard
+          status={notificationStatus}
+          message={notificationMessage}
+          onEnable={() => void enableBrowserNotifications()}
+          onTest={testNotification}
+        />
+
+        <div className="mb-3 mt-3 rounded-xl border border-[#c9a84c22] bg-[#c9a84c0a] px-3 py-2.5 text-[10px] leading-4 text-[#7f8898]">
+          ตัวเลือกด้านล่างเป็นความต้องการรับแจ้งเตือน ส่วนการส่งตามเวลาหรือส่งตอนปิดเว็บต้องใช้ Push Service + Scheduler ซึ่งยังอยู่ในขั้น backend ถัดไป
+        </div>
+
         <div className="mb-6 flex flex-col gap-2">
           {notificationItems.map((item) => (
             <div key={item.id} className="glass-card flex items-center justify-between gap-3 rounded-2xl p-3.5">
@@ -136,7 +208,7 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
                 type="button"
                 aria-label={item.label}
                 data-on={notifications[item.id]}
-                onClick={() => updateNotification(item.id)}
+                onClick={() => void updateNotification(item.id)}
                 className="toggle"
               >
                 <span className="toggle-knob block" />
@@ -147,7 +219,7 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
 
         <h2 className="mb-2 font-[Cinzel] text-[11px] font-semibold uppercase tracking-[.18em] text-[#a8b8cc]">ตั้งค่า</h2>
         <div className="divide-y divide-[#a8b8cc0f]">
-          {["🌙  ธีมกลางคืน · เปิดใช้งาน", "🗣️  ภาษา · ไทย", "📋  แหล่งผลสถิติ · รอเชื่อม", "🔒  นโยบายความเป็นส่วนตัว", "ℹ️  เกี่ยวกับ Teehauy · 2.0.0"].map((item) => (
+          {["🌙  ธีมกลางคืน · เปิดใช้งาน", "🗣️  ภาษา · ไทย", "📊  สถิติ · Provider API", "🔒  นโยบายความเป็นส่วนตัว", "ℹ️  เกี่ยวกับ Teehauy · 2.1.0"].map((item) => (
             <div key={item} className="flex items-center justify-between px-1 py-3 text-sm text-[#a8b8cc]">
               <span>{item}</span><span className="text-[#333847]">›</span>
             </div>
@@ -159,6 +231,49 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
         </p>
       </div>
     </section>
+  );
+}
+
+function NotificationPermissionCard({
+  status,
+  message,
+  onEnable,
+  onTest,
+}: {
+  status: BrowserNotificationStatus;
+  message: string | null;
+  onEnable: () => void;
+  onTest: () => void;
+}) {
+  const labels: Record<BrowserNotificationStatus, { title: string; description: string; tone: string }> = {
+    checking: { title: "กำลังตรวจสิทธิ์แจ้งเตือน", description: "ตรวจสอบความสามารถของเบราว์เซอร์", tone: "text-[#a8b8cc]" },
+    unsupported: { title: "ไม่รองรับ Web Notification", description: "อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับ", tone: "text-[#ff8060]" },
+    default: { title: "ยังไม่ได้อนุญาตแจ้งเตือน", description: "อนุญาตเพื่อทดสอบการแจ้งเตือนจากเว็บ", tone: "text-[#d9c678]" },
+    granted: { title: "อนุญาตแจ้งเตือนแล้ว", description: "ทดสอบ Notification จากเบราว์เซอร์ได้", tone: "text-[#80d0c0]" },
+    denied: { title: "การแจ้งเตือนถูกบล็อก", description: "เปิดสิทธิ์จากการตั้งค่าเว็บไซต์ของเบราว์เซอร์", tone: "text-[#ff8060]" },
+  };
+  const item = labels[status];
+
+  return (
+    <div className="glass-card rounded-2xl p-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <strong className={`block text-sm ${item.tone}`}>{item.title}</strong>
+          <span className="mt-0.5 block text-[11px] leading-4 text-[#596071]">{item.description}</span>
+        </div>
+        {status === "default" ? (
+          <button type="button" onClick={onEnable} className="shrink-0 rounded-xl border border-[#c9a84c44] bg-[#c9a84c10] px-3 py-2 text-[11px] font-semibold text-[#d9c678]">
+            อนุญาต
+          </button>
+        ) : null}
+        {status === "granted" ? (
+          <button type="button" onClick={onTest} className="shrink-0 rounded-xl border border-[#80d0c044] bg-[#80d0c010] px-3 py-2 text-[11px] font-semibold text-[#80d0c0]">
+            ทดสอบ
+          </button>
+        ) : null}
+      </div>
+      {message ? <p className="mt-2 border-t border-[#a8b8cc12] pt-2 text-[10px] leading-4 text-[#7f8898]">{message}</p> : null}
+    </div>
   );
 }
 
