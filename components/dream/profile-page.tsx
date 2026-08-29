@@ -14,16 +14,20 @@ export function ProfilePage({ historyCount, favoriteCount }: { historyCount: num
   });
 
   useEffect(() => {
-    const savedName = localStorage.getItem("teehauy:name");
-    const savedNotifications = localStorage.getItem("teehauy:notifications");
-    if (savedName) setName(savedName);
-    if (savedNotifications) {
-      try {
-        setNotifications(JSON.parse(savedNotifications) as Record<string, boolean>);
-      } catch {
-        // Keep defaults when old local data is malformed.
+    const timer = window.setTimeout(() => {
+      const savedName = localStorage.getItem("teehauy:name");
+      const savedNotifications = localStorage.getItem("teehauy:notifications");
+      if (savedName) setName(savedName);
+      if (savedNotifications) {
+        try {
+          setNotifications(JSON.parse(savedNotifications) as Record<string, boolean>);
+        } catch {
+          // Keep defaults when old local data is malformed.
+        }
       }
-    }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   const updateNotification = (id: string) => {
