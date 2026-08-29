@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { ProfilePage } from "@/components/dream/profile-page";
 import { getOrCreateGuestToken } from "@/lib/browser-guest";
@@ -30,7 +30,10 @@ export function AccountProfilePage({ historyCount, favoriteCount }: { historyCou
   };
 
   useEffect(() => {
-    void loadSession();
+    const timer = window.setTimeout(() => {
+      void loadSession();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
