@@ -133,15 +133,14 @@ export default function DreamApp() {
   }, []);
 
   const toggleFavorite = useCallback(async (result: DreamResult) => {
-    let shouldFavorite = true;
+    const exists = favorites.some((item) => sameResult(item, result));
+    const shouldFavorite = !exists;
 
-    setFavorites((prev) => {
-      const exists = prev.some((item) => sameResult(item, result));
-      shouldFavorite = !exists;
-      return exists
+    setFavorites((prev) =>
+      exists
         ? prev.filter((item) => !sameResult(item, result))
-        : mergeResults([result], prev, 100);
-    });
+        : mergeResults([result], prev, 100),
+    );
 
     if (!result.id) return;
 
@@ -159,7 +158,7 @@ export default function DreamApp() {
     } catch {
       // Optimistic local favorite state remains usable offline.
     }
-  }, []);
+  }, [favorites]);
 
   const isFavorite = useCallback(
     (result: DreamResult) => favorites.some((item) => sameResult(item, result)),
