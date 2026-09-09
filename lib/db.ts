@@ -1,152 +1,31 @@
-import { neon } from "@neondatabase/serverless";
-
 import type { DreamResult, NumberItem } from "@/lib/dream-engine";
+import { createClient } from "@/lib/supabase/server";
+type DreamJoin = { dream_text?: string; occurred_on?: string | null; created_at?: string };
+type Row = { id: string; meaning: string; lucky_element: DreamResult["luckyElement"]; numbers: NumberItem[]; created_at: string; dreams?: DreamJoin | DreamJoin[] | null };
+const dreamOf = (value: Row["dreams"]): DreamJoin => (Array.isArray(value) ? value[0] : value) ?? {};
+const mapRow = (row: Row): DreamResult & { id: string } => { const dream = dreamOf(row.dreams); return { id: row.id, dreamText: dream.dream_text ?? "ความฝันที่บันทึกไว้", numbers: Array.isArray(row.numbers) ? row.numbers : [], meaning: row.meaning, luckyElement: row.lucky_element, date: (dream.occurred_on ?? dream.created_at ?? row.created_at).slice(0, 10) }; };
 
-export type PersistedDreamResult = DreamResult & { id: string };
-
-type DreamRow = {
-  id: string;
-  dream_text: string;
-  numbers: NumberItem[] | string;
-  meaning: string;
-  lucky_element: DreamResult["luckyElement"];
-  result_date: string | Date;
-};
-
-function databaseUrl(): string | null {
-  const value = process.env.DATABASE_URL?.trim();
-  return value || null;
+export async function saveDreamInterpretation(result: DreamResult) {
+  const supabase = await createClient();
+  const response = await supabase.rpc("save_dream_result", { p_dream_text: result.dreamText, p_meaning: result.meaning, p_lucky_element: result.luckyElement, p_engine_version: "rule-engine-v2", p_numbers: result.numbers });
+  if (response.error || typeof response.data !== "string") throw response.error ?? new Error("Dream result was not saved");
+  return { ...result, id: response.data };
 }
-
-export function isDatabaseConfigured(): boolean {
-  return Boolean(databaseUrl());
+export async function listDreamHistory(limit = 30) {
+  const supabase = await createClient();
+  const response = await supabase.from("dream_interpretations").select("id, meaning, lucky_element, numbers, created_at, dreams!inner(dream_text, occurred_on, created_at)").order("created_at", { ascending: false }).limit(limit);
+  if (response.error) throw response.error;
+  return ((response.data ?? []) as unknown as Row[]).map(mapRow);
 }
-
-function getSql() {
-  const url = databaseUrl();
-  if (!url) throw new Error("DATABASE_URL is not configured");
-  return neon(url);
+export async function listDreamFavorites(limit = 100) {
+  const supabase = await createClient();
+  const response = await supabase.from("dream_favorites").select("created_at, dream_interpretations!inner(id, meaning, lucky_element, numbers, created_at, dreams!inner(dream_text, occurred_on, created_at))").order("created_at", { ascending: false }).limit(limit);
+  if (response.error) throw response.error;
+  return (response.data ?? []).flatMap((favorite) => { const value = (favorite as Record<string, unknown>).dream_interpretations; const row = (Array.isArray(value) ? value[0] : value) as Row | undefined; return row ? [mapRow(row)] : []; });
 }
-
-function parseNumbers(value: NumberItem[] | string): NumberItem[] {
-  if (Array.isArray(value)) return value;
-  return JSON.parse(value) as NumberItem[];
-}
-
-function normalizeDate(value: string | Date): string {
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
-}
-
-function mapDreamRow(row: DreamRow): PersistedDreamResult {
-  return {
-    id: row.id,
-    dreamText: row.dream_text,
-    numbers: parseNumbers(row.numbers),
-    meaning: row.meaning,
-    luckyElement: row.lucky_element,
-    date: normalizeDate(row.result_date),
-  };
-}
-
-export async function saveDreamInterpretation(
-  ownerHash: string,
-  result: DreamResult,
-): Promise<PersistedDreamResult> {
-  const sql = getSql();
-  const rows = await sql`
-    INSERT INTO public.dream_interpretations (
-      owner_hash,
-      dream_text,
-      numbers,
-      meaning,
-      lucky_element,
-      result_date,
-      source
-    ) VALUES (
-      ${ownerHash},
-      ${result.dreamText},
-      ${JSON.stringify(result.numbers)}::jsonb,
-      ${result.meaning},
-      ${result.luckyElement},
-      ${result.date},
-      'rule-engine-v1'
-    )
-    RETURNING id, dream_text, numbers, meaning, lucky_element, result_date
-  `;
-
-  return mapDreamRow(rows[0] as DreamRow);
-}
-
-export async function listDreamHistory(ownerHash: string, limit = 30): Promise<PersistedDreamResult[]> {
-  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-  const sql = getSql();
-  const rows = await sql`
-    SELECT id, dream_text, numbers, meaning, lucky_element, result_date
-    FROM public.dream_interpretations
-    WHERE owner_hash = ${ownerHash}
-    ORDER BY created_at DESC
-    LIMIT ${safeLimit}
-  `;
-
-  return rows.map((row) => mapDreamRow(row as DreamRow));
-}
-
-export async function listDreamFavorites(ownerHash: string, limit = 100): Promise<PersistedDreamResult[]> {
-  const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
-  const sql = getSql();
-  const rows = await sql`
-    SELECT i.id, i.dream_text, i.numbers, i.meaning, i.lucky_element, i.result_date
-    FROM public.dream_favorites AS f
-    JOIN public.dream_interpretations AS i ON i.id = f.interpretation_id
-    WHERE f.owner_hash = ${ownerHash}
-      AND i.owner_hash = ${ownerHash}
-    ORDER BY f.created_at DESC
-    LIMIT ${safeLimit}
-  `;
-
-  return rows.map((row) => mapDreamRow(row as DreamRow));
-}
-
-export async function setDreamFavorite(
-  ownerHash: string,
-  interpretationId: string,
-  favorite: boolean,
-): Promise<boolean> {
-  const sql = getSql();
-
-  if (favorite) {
-    const rows = await sql`
-      INSERT INTO public.dream_favorites (owner_hash, interpretation_id)
-      SELECT ${ownerHash}, id
-      FROM public.dream_interpretations
-      WHERE id = ${interpretationId}
-        AND owner_hash = ${ownerHash}
-      ON CONFLICT (owner_hash, interpretation_id) DO NOTHING
-      RETURNING interpretation_id
-    `;
-
-    if (rows.length) return true;
-
-    const existing = await sql`
-      SELECT 1
-      FROM public.dream_favorites AS f
-      JOIN public.dream_interpretations AS i ON i.id = f.interpretation_id
-      WHERE f.owner_hash = ${ownerHash}
-        AND f.interpretation_id = ${interpretationId}
-        AND i.owner_hash = ${ownerHash}
-      LIMIT 1
-    `;
-    return existing.length > 0;
-  }
-
-  await sql`
-    DELETE FROM public.dream_favorites AS f
-    USING public.dream_interpretations AS i
-    WHERE f.interpretation_id = i.id
-      AND f.owner_hash = ${ownerHash}
-      AND f.interpretation_id = ${interpretationId}
-      AND i.owner_hash = ${ownerHash}
-  `;
-  return false;
+export async function setDreamFavorite(userId: string, interpretationId: string, favorite: boolean) {
+  const supabase = await createClient();
+  const response = favorite ? await supabase.from("dream_favorites").upsert({ user_id: userId, interpretation_id: interpretationId }) : await supabase.from("dream_favorites").delete().eq("interpretation_id", interpretationId).eq("user_id", userId);
+  if (response.error) throw response.error;
+  return favorite;
 }

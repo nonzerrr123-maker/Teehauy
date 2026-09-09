@@ -1,43 +1,13 @@
 import { NextResponse } from "next/server";
-
-import { isDatabaseConfigured, listDreamFavorites, listDreamHistory } from "@/lib/db";
-import { resolveRequestOwner } from "@/lib/request-owner";
-
-export const runtime = "nodejs";
+import { listDreamFavorites, listDreamHistory } from "@/lib/db";
+import { createClient } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
-
-export async function GET(request: Request) {
-  const { ownerHash, authenticated } = await resolveRequestOwner(request);
-
-  if (!ownerHash) {
-    return NextResponse.json(
-      { ok: false, error: "OWNER_REQUIRED", message: "ไม่พบตัวระบุบัญชีหรืออุปกรณ์" },
-      { status: 401 },
-    );
-  }
-
-  if (!isDatabaseConfigured()) {
-    return NextResponse.json(
-      { ok: false, error: "DATABASE_NOT_CONFIGURED", message: "ฐานข้อมูลยังไม่ได้เชื่อมต่อ" },
-      { status: 503 },
-    );
-  }
-
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ ok: false, message: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
   try {
-    const [history, favorites] = await Promise.all([
-      listDreamHistory(ownerHash, 30),
-      listDreamFavorites(ownerHash, 100),
-    ]);
-
-    return NextResponse.json(
-      { ok: true, history, favorites, authenticated },
-      { headers: { "Cache-Control": "no-store" } },
-    );
-  } catch (error) {
-    console.error("Failed to load dream history", error);
-    return NextResponse.json(
-      { ok: false, error: "DATABASE_UNAVAILABLE", message: "ยังโหลดประวัติจากฐานข้อมูลไม่ได้" },
-      { status: 503 },
-    );
-  }
+    const [history, favorites] = await Promise.all([listDreamHistory(30), listDreamFavorites(100)]);
+    return NextResponse.json({ ok: true, history, favorites, authenticated: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch { return NextResponse.json({ ok: false, message: "ยังโหลดประวัติไม่ได้" }, { status: 503 }); }
 }

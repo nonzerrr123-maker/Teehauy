@@ -9,7 +9,6 @@ import { HistoryPage } from "@/components/dream/history-page";
 import { HomePage } from "@/components/dream/home-page";
 import { ResultsPage } from "@/components/dream/results-page";
 import { StatsPage } from "@/components/dream/stats-page";
-import { getOrCreateGuestToken } from "@/lib/browser-guest";
 import { interpretDream, type DreamResult } from "@/lib/dream-engine";
 
 type InterpretApiResponse =
@@ -34,7 +33,7 @@ function mergeResults(primary: DreamResult[], secondary: DreamResult[], limit = 
   return merged;
 }
 
-export default function DreamApp() {
+export default function DreamApp({ userId }: { userId: string }) {
   const [activeTab, setActiveTab] = useState<DreamTab>("home");
   const [showResults, setShowResults] = useState(false);
   const [currentResult, setCurrentResult] = useState<DreamResult | null>(null);
@@ -62,10 +61,8 @@ export default function DreamApp() {
       setFavorites(localFavorites);
       setHydrated(true);
 
-      const guestToken = getOrCreateGuestToken();
       void fetch("/api/dream/history", {
         method: "GET",
-        headers: { "x-teehauy-guest": guestToken },
         cache: "no-store",
       })
         .then(async (response) => ({ response, payload: (await response.json()) as HistoryApiResponse }))
@@ -102,12 +99,10 @@ export default function DreamApp() {
     let result: DreamResult;
 
     try {
-      const guestToken = getOrCreateGuestToken();
       const response = await fetch("/api/dream/interpret", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-teehauy-guest": guestToken,
         },
         body: JSON.stringify({ dreamText: normalized }),
         cache: "no-store",
@@ -145,12 +140,10 @@ export default function DreamApp() {
     if (!result.id) return;
 
     try {
-      const guestToken = getOrCreateGuestToken();
       await fetch("/api/dream/favorite", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-teehauy-guest": guestToken,
         },
         body: JSON.stringify({ interpretationId: result.id, favorite: shouldFavorite }),
         cache: "no-store",
@@ -208,7 +201,7 @@ export default function DreamApp() {
         ) : null}
 
         {activeTab === "stats" ? <StatsPage /> : null}
-        {activeTab === "profile" ? <AccountProfilePage historyCount={savedResults.length} favoriteCount={favorites.length} /> : null}
+        {activeTab === "profile" ? <AccountProfilePage userId={userId} historyCount={savedResults.length} favoriteCount={favorites.length} /> : null}
       </div>
 
       <BottomNav activeTab={activeTab} onChange={changeTab} />

@@ -26,9 +26,7 @@ export function StatsPage() {
       .catch(() => setLoadError(true));
   }, []);
 
-  const sourceText = stats?.source === "external"
-    ? stats.sourceLabel
-    : stats?.sourceLabel ?? "กำลังโหลดข้อมูล...";
+  const sourceText = stats?.sourceLabel ?? "กำลังโหลดข้อมูล...";
 
   return (
     <section className="fade-up flex h-full flex-col">
@@ -39,8 +37,8 @@ export function StatsPage() {
             <p className="mt-1 text-xs text-[#6b7585]">{sourceText}</p>
           </div>
           {stats ? (
-            <span className={`mt-1 shrink-0 rounded-full border px-2 py-1 text-[9px] ${stats.source === "external" ? "border-[#80d0c044] text-[#80d0c0]" : "border-[#c9a84c44] text-[#d9c678]"}`}>
-              {stats.source === "external" ? "LIVE SOURCE" : "SAMPLE"}
+            <span className={`mt-1 shrink-0 rounded-full border px-2 py-1 text-[9px] ${stats.source === "official" ? "border-[#80d0c044] text-[#80d0c0]" : "border-[#c9a84c44] text-[#d9c678]"}`}>
+              {stats.source === "official" ? "OFFICIAL" : "WAITING DATA"}
             </span>
           ) : null}
         </div>
@@ -106,9 +104,9 @@ export function StatsPage() {
               <StatNumbers title="เลขที่พบน้อย" icon="❄️" values={stats.coldNumbers} muted />
             </div>
             <p className="mt-4 text-[10px] leading-4 text-[#454b5a]">
-              {stats.source === "sample"
-                ? "หมายเหตุ: ตอนนี้ provider ยังใช้ข้อมูลตัวอย่างเพื่อทดสอบ UI ไม่ใช่ผลรางวัลจริง"
-                : "สถิติคำนวณจากข้อมูลที่ provider ส่งมา ไม่ใช่การทำนายผลรางวัลในอนาคต"}
+              {stats.source === "unavailable"
+                ? "ยังไม่แสดงข้อมูลตัวอย่างแทนข้อมูลจริง เพื่อป้องกันความเข้าใจผิด"
+                : "สถิติคำนวณจากผลรางวัลทางการ ไม่ใช่การรับประกันผลในอนาคต"}
             </p>
           </>
         ) : null}
