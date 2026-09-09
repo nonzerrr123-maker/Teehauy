@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 import { quickCategories } from "@/lib/dream-catalog";
 import { PageHeader } from "@/components/dream/common";
@@ -87,6 +88,9 @@ export function HomePage({
               <span className="text-xs font-medium text-[#a8b8cc]">{item.label}</span>
             </button>
           ))}
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2.5">
+          {[["/predictions","🎯","เลขที่ฉันตี"],["/tickets","🎟️","สลากของฉัน"],["/analysis","∑","วิเคราะห์งวดหน้า"],["/community","✦","ชุมชน"]].map(([href,icon,label]) => <Link key={href} href={href} className="glass-card rounded-xl px-3 py-3 text-sm font-semibold text-[#aebbc9]"><span className="mr-2 text-[#f0c040]">{icon}</span>{label}</Link>)}
         </div>
         <p className="mt-7 text-center font-[Cinzel] text-[9px] uppercase tracking-[.22em] text-[#292a38]">◆ เส้นทางแห่งโชคชะตา ◆</p>
       </div>
