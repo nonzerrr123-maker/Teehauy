@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Teehauy</title>
+  <desc id="desc">Golden mystical orb and star on a dark background</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%">
+      <stop offset="0" stop-color="#25203a"/>
+      <stop offset="0.58" stop-color="#0d0d18"/>
+      <stop offset="1" stop-color="#06060c"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff1a6"/>
+      <stop offset="0.34" stop-color="#f0c040"/>
+      <stop offset="0.72" stop-color="#c9a84c"/>
+      <stop offset="1" stop-color="#7a5c1e"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="270" r="132" fill="#13131f" stroke="url(#gold)" stroke-width="10"/>
+  <circle cx="256" cy="270" r="106" fill="none" stroke="#c9a84c" stroke-opacity=".22" stroke-width="2"/>
+  <path d="M256 104l14 40 40 14-40 14-14 40-14-40-40-14 40-14 14-40z" fill="url(#gold)" filter="url(#glow)"/>
+  <path d="M209 264c17-49 78-72 121-32-14-6-30-8-45-4-41 10-64 50-52 90 9 29 33 50 62 56-55 10-105-29-105-86 0-8 1-16 3-24 5 2 10 2 16 0z" fill="url(#gold)"/>
+  <circle cx="324" cy="286" r="10" fill="#e8f0ff" opacity=".9" filter="url(#glow)"/>
+  <circle cx="178" cy="211" r="5" fill="#f0c040" opacity=".8"/>
+  <circle cx="354" cy="199" r="4" fill="#d4e0ee" opacity=".7"/>
+  <circle cx="160" cy="341" r="4" fill="#d4e0ee" opacity=".55"/>
+  <text x="256" y="448" text-anchor="middle" fill="#d9c678" font-family="Georgia,serif" font-size="40" font-weight="700" letter-spacing="4">T</text>
+</svg>
