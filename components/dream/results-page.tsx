@@ -1,6 +1,14 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { Check, LoaderCircle, Save, Share2 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+import { createClient } from "@/lib/supabase/client";
 import type { DreamResult } from "@/lib/dream-engine";
+
+type Draw = { id: string; draw_date: string };
 
 export function ResultsPage({
   result,
@@ -13,12 +21,40 @@ export function ResultsPage({
   onFavorite: () => void;
   onBack: () => void;
 }) {
+  const [draws, setDraws] = useState<Draw[]>([]);
+  const [drawId, setDrawId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const elementStyle: Record<string, string> = {
     ทอง: "border-[#c9a84c66] bg-[#c9a84c18] text-[#f0c040]",
     น้ำ: "border-[#58a6ff66] bg-[#58a6ff18] text-[#80c0ff]",
     ไฟ: "border-[#ff806066] bg-[#ff806018] text-[#ff8060]",
     ดิน: "border-[#c0906066] bg-[#c0906018] text-[#c09060]",
     ลม: "border-[#80d0c066] bg-[#80d0c018] text-[#80d0c0]",
+  };
+
+  useEffect(() => {
+    let active = true;
+    void createClient().from("lottery_draws").select("id, draw_date").eq("status", "scheduled").order("draw_date").limit(6).then(({ data }) => {
+      if (!active) return;
+      const next = (data ?? []) as Draw[];
+      setDraws(next);
+      setDrawId(next[0]?.id ?? "");
+    });
+    return () => { active = false; };
+  }, []);
+
+  const saveForDraw = async () => {
+    if (!result.id) return setSaveMessage("ผลนี้มาจากโหมดออฟไลน์ จึงยังเก็บเข้ารอบงวดไม่ได้");
+    if (!drawId) return setSaveMessage("ยังไม่มีงวดถัดไปในระบบ");
+    setSaving(true);
+    setSaveMessage(null);
+    const { error } = await createClient().rpc("save_dream_prediction", { p_interpretation_id: result.id, p_draw_id: drawId, p_numbers: result.numbers });
+    setSaving(false);
+    if (error) return setSaveMessage(`บันทึกไม่สำเร็จ: ${error.message}`);
+    setSaved(true);
+    setSaveMessage("เก็บเลขไว้ในสลากของฉันแล้ว ระบบจะเทียบผลให้อัตโนมัติ");
   };
 
   const share = async () => {
@@ -87,13 +123,14 @@ export function ResultsPage({
           <p className="text-sm leading-6 text-[#aebaca]">{result.meaning}</p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void share()}
-          className="w-full rounded-2xl border border-[#c9a84c44] bg-[#c9a84c10] py-3.5 text-sm font-semibold text-[#d9c678]"
-        >
-          ↗ แชร์ผลการตีเลข
-        </button>
+        <div className="mb-3 space-y-3 rounded-2xl border border-primary/20 bg-card p-4">
+          <div><p className="text-sm font-semibold text-foreground">เก็บเลขไว้ตรวจงวดนี้</p><p className="mt-0.5 text-xs text-muted-foreground">เมื่อผลทางการยืนยัน ระบบจะเทียบชนิดเลขให้อัตโนมัติ</p></div>
+          <NativeSelect value={drawId} onChange={(event) => setDrawId(event.target.value)} disabled={saved}>{draws.length ? draws.map((draw) => <option key={draw.id} value={draw.id}>งวด {new Date(`${draw.draw_date}T12:00:00+07:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับเลข</option>}</NativeSelect>
+          <Button type="button" variant="gold" className="w-full" disabled={saving || saved || !drawId} onClick={() => void saveForDraw()}>{saving ? <><LoaderCircle className="animate-spin" /> กำลังบันทึก...</> : saved ? <><Check /> บันทึกแล้ว</> : <><Save /> เก็บในสลากของฉัน</>}</Button>
+          {saveMessage ? <p className="text-xs leading-5 text-muted-foreground">{saveMessage}</p> : null}
+        </div>
+
+        <Button type="button" onClick={() => void share()} variant="outline" className="w-full"><Share2 /> แชร์ผลการตีเลข</Button>
         <p className="mt-4 text-center text-[10px] leading-4 text-[#464c5b]">
           ผลการตีเลขเป็นคอนเทนต์เพื่อความบันเทิง ไม่ใช่การรับประกันผลรางวัล
         </p>

@@ -7,5 +7,5 @@ export default async function Home() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  return <main className="h-dvh bg-[#06060C]"><DreamApp userId={user.id} /></main>;
+  return <DreamApp userId={user.id} />;
 }
