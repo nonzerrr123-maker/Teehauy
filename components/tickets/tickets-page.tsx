@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { CheckCircle2, Clock3, LoaderCircle, Plus, RefreshCw, Sparkles, Ticket } from "lucide-react";
+import { CheckCircle2, Clock3, Globe2, LoaderCircle, LockKeyhole, Plus, RefreshCw, Sparkles, Ticket, Users } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,8 @@ import { createClient } from "@/lib/supabase/client";
 type Draw = { id: string; draw_date: string; status: string };
 type Match = { id: number; match_kind: string; lottery_prizes: { prize_type: string; prize_amount: number } | null };
 type Prediction = { id: string; title: string | null; source_type: string; created_at: string; lottery_draws: Draw | null; prediction_numbers: { id: number; number_value: string; number_kind: string; prediction_matches: Match[] }[] };
-type SavedTicket = { id: string; ticket_number: string; quantity: number; lottery_draws: Draw | null; ticket_wins: { id: number; prize_amount: number }[] };
+type TicketVisibility = "private" | "followers" | "public";
+type SavedTicket = { id: string; ticket_number: string; quantity: number; visibility: TicketVisibility; lottery_draws: Draw | null; ticket_wins: { id: number; prize_amount: number }[] };
 
 const sourceLabels: Record<string, string> = { dream: "จากความฝัน", post: "จากโพสต์", manual: "เพิ่มเอง", model: "แบบจำลอง" };
 const kindLabels: Record<string, string> = { dream_two: "2 ตัว", derived_top_two: "2 ตัวบน", last_two: "2 ตัวล่าง", dream_three: "3 ตัว", front_three: "3 ตัวหน้า", last_three: "3 ตัวท้าย", six_digit_ticket: "6 หลัก" };
@@ -31,6 +32,7 @@ export function TicketsPage({ userId }: { userId: string }) {
   const [drawId, setDrawId] = useState("");
   const [number, setNumber] = useState("");
   const [quantity, setQuantity] = useState(1);
+  const [visibility, setVisibility] = useState<TicketVisibility>("private");
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -41,7 +43,7 @@ export function TicketsPage({ userId }: { userId: string }) {
     const [drawResponse, predictionResponse, ticketResponse] = await Promise.all([
       supabase.from("lottery_draws").select("id,draw_date,status").in("status", ["scheduled", "published", "verified"]).order("draw_date", { ascending: false }),
       supabase.from("user_predictions").select("id,title,source_type,created_at,lottery_draws(id,draw_date,status),prediction_numbers(id,number_value,number_kind,prediction_matches(id,match_kind,lottery_prizes(prize_type,prize_amount)))").eq("status", "submitted").order("created_at", { ascending: false }).limit(100),
-      supabase.from("user_tickets").select("id,ticket_number,quantity,lottery_draws(id,draw_date,status),ticket_wins(id,prize_amount)").order("created_at", { ascending: false }).limit(100),
+      supabase.from("user_tickets").select("id,ticket_number,quantity,visibility,lottery_draws(id,draw_date,status),ticket_wins(id,prize_amount)").order("created_at", { ascending: false }).limit(100),
     ]);
     if (drawResponse.error || predictionResponse.error || ticketResponse.error) {
       setLoadError(true);
@@ -70,12 +72,23 @@ export function TicketsPage({ userId }: { userId: string }) {
     if (!drawId) return setMessage("เลือกงวดก่อนบันทึก");
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return setMessage("จำนวนสลากต้องอยู่ระหว่าง 1-100 ใบ");
     setSaving(true); setMessage(null);
-    const { error } = await createClient().from("user_tickets").upsert({ user_id: userId, draw_id: drawId, ticket_number: number, quantity }, { onConflict: "user_id,draw_id,ticket_number" });
+    const { error } = await createClient().from("user_tickets").upsert({ user_id: userId, draw_id: drawId, ticket_number: number, quantity, visibility }, { onConflict: "user_id,draw_id,ticket_number" });
     setSaving(false);
     if (error) return setMessage(`บันทึกไม่สำเร็จ: ${error.message}`);
     setNumber("");
     setMessage("บันทึกสลากแล้ว");
     await load();
+  };
+
+  const updateVisibility = async (ticketId: string, nextVisibility: TicketVisibility) => {
+    setTickets((current) => current.map((ticketItem) => ticketItem.id === ticketId ? { ...ticketItem, visibility: nextVisibility } : ticketItem));
+    const { error } = await createClient().from("user_tickets").update({ visibility: nextVisibility }).eq("id", ticketId).eq("user_id", userId);
+    if (error) {
+      setMessage("เปลี่ยนการมองเห็นไม่สำเร็จ");
+      await load();
+      return;
+    }
+    setMessage(nextVisibility === "private" ? "ตั้งสลากเป็นส่วนตัวแล้ว" : nextVisibility === "followers" ? "แชร์สลากนี้กับผู้ติดตามแล้ว" : "แชร์สลากนี้แบบสาธารณะแล้ว");
   };
 
   if (loading) return <div className="space-y-3"><div className="h-20 animate-pulse rounded-2xl bg-muted" /><div className="h-48 animate-pulse rounded-2xl bg-muted" /></div>;
@@ -99,8 +112,8 @@ export function TicketsPage({ userId }: { userId: string }) {
         </TabsContent>
 
         <TabsContent value="tickets" className="space-y-4">
-          <Card><CardHeader className="p-4 pb-2"><CardTitle className="text-base">เพิ่มสลากที่ซื้อจริง</CardTitle></CardHeader><CardContent><form onSubmit={submitTicket} className="space-y-3"><div className="space-y-2"><Label htmlFor="ticket-draw">งวด</Label><NativeSelect id="ticket-draw" value={drawId} disabled={!draws.some((draw) => draw.status === "scheduled")} onChange={(event) => setDrawId(event.target.value)}>{draws.some((draw) => draw.status === "scheduled") ? draws.filter((draw) => draw.status === "scheduled").map((draw) => <option key={draw.id} value={draw.id}>{dateLabel(draw.draw_date)}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับสลาก</option>}</NativeSelect></div><div className="grid grid-cols-[1fr_82px] gap-3"><div className="space-y-2"><Label htmlFor="ticket-number">เลข 6 หลัก</Label><Input id="ticket-number" inputMode="numeric" maxLength={6} value={number} onChange={(event) => setNumber(event.target.value.replace(/\D/g, ""))} placeholder="123456" className="tabular-nums" /></div><div className="space-y-2"><Label htmlFor="ticket-quantity">จำนวนใบ</Label><Input id="ticket-quantity" type="number" min={1} max={100} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div></div><Button type="submit" variant="gold" className="w-full" disabled={!drawId || saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Plus />} {saving ? "กำลังบันทึก..." : "บันทึกสลาก"}</Button>{message ? <Alert><AlertDescription>{message}</AlertDescription></Alert> : null}</form></CardContent></Card>
-          {tickets.map((item) => <Card key={item.id}><CardContent className="flex items-center gap-3 p-4"><span className="flex size-11 items-center justify-center rounded-xl bg-secondary"><Ticket className="size-5 text-primary" /></span><div className="min-w-0 flex-1"><strong className="font-display text-xl tracking-[.15em] text-primary">{item.ticket_number}</strong><p className="text-[11px] text-muted-foreground">งวด {dateLabel(item.lottery_draws?.draw_date)} · {item.quantity} ใบ</p></div>{item.ticket_wins.length ? <CheckCircle2 className="size-5 text-success" /> : <Clock3 className="size-5 text-muted-foreground" />}</CardContent></Card>)}
+          <Card><CardHeader className="p-4 pb-2"><CardTitle className="text-base">เพิ่มสลากที่ซื้อจริง</CardTitle></CardHeader><CardContent><form onSubmit={submitTicket} className="space-y-3"><div className="space-y-2"><Label htmlFor="ticket-draw">งวด</Label><NativeSelect id="ticket-draw" value={drawId} disabled={!draws.some((draw) => draw.status === "scheduled")} onChange={(event) => setDrawId(event.target.value)}>{draws.some((draw) => draw.status === "scheduled") ? draws.filter((draw) => draw.status === "scheduled").map((draw) => <option key={draw.id} value={draw.id}>{dateLabel(draw.draw_date)}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับสลาก</option>}</NativeSelect></div><div className="grid grid-cols-[1fr_82px] gap-3"><div className="space-y-2"><Label htmlFor="ticket-number">เลข 6 หลัก</Label><Input id="ticket-number" inputMode="numeric" maxLength={6} value={number} onChange={(event) => setNumber(event.target.value.replace(/\D/g, ""))} placeholder="123456" className="tabular-nums" /></div><div className="space-y-2"><Label htmlFor="ticket-quantity">จำนวนใบ</Label><Input id="ticket-quantity" type="number" min={1} max={100} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div></div><div className="space-y-2"><Label htmlFor="ticket-visibility">ใครมองเห็นสลากนี้</Label><NativeSelect id="ticket-visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as TicketVisibility)}><option value="private">เฉพาะฉัน (ค่าเริ่มต้น)</option><option value="followers">ผู้ติดตามเท่านั้น</option><option value="public">สาธารณะ</option></NativeSelect><p className="text-[11px] leading-5 text-muted-foreground">การติดตามไม่เปิดข้อมูลอัตโนมัติ คุณเป็นผู้เลือกแชร์สลากแต่ละใบเอง</p></div><Button type="submit" variant="gold" className="w-full" disabled={!drawId || saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Plus />} {saving ? "กำลังบันทึก..." : "บันทึกสลาก"}</Button>{message ? <Alert><AlertDescription>{message}</AlertDescription></Alert> : null}</form></CardContent></Card>
+          {tickets.map((item) => <Card key={item.id}><CardContent className="p-4"><div className="flex items-center gap-3"><span className="flex size-11 items-center justify-center rounded-xl bg-secondary"><Ticket className="size-5 text-primary" /></span><div className="min-w-0 flex-1"><strong className="font-display text-xl tracking-[.15em] text-primary">{item.ticket_number}</strong><p className="text-[11px] text-muted-foreground">งวด {dateLabel(item.lottery_draws?.draw_date)} · {item.quantity} ใบ</p></div>{item.ticket_wins.length ? <CheckCircle2 className="size-5 text-success" /> : <Clock3 className="size-5 text-muted-foreground" />}</div><div className="mt-3 flex items-center gap-2 border-t border-border pt-3">{item.visibility === "private" ? <LockKeyhole className="size-4 text-muted-foreground" /> : item.visibility === "followers" ? <Users className="size-4 text-primary" /> : <Globe2 className="size-4 text-primary" />}<NativeSelect aria-label={`การมองเห็นสลาก ${item.ticket_number}`} className="h-9" value={item.visibility} onChange={(event) => void updateVisibility(item.id, event.target.value as TicketVisibility)}><option value="private">เฉพาะฉัน</option><option value="followers">ผู้ติดตามเท่านั้น</option><option value="public">สาธารณะ</option></NativeSelect></div></CardContent></Card>)}
           {!tickets.length ? <Empty icon={Ticket} title="ยังไม่ได้บันทึกสลาก" detail="สแกนหรือกรอกเลข 6 หลัก เพื่อรวมการตรวจผลไว้ในหน้าเดียว" /> : null}
         </TabsContent>
       </Tabs>
