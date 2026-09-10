@@ -74,19 +74,20 @@ export function PostComments({
   };
 
   return (
-    <div className="w-full">
+    <>
       <Button
         type="button"
         variant="ghost"
         size="sm"
+        className="flex-1"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
-        <MessageCircle /> {comments.length ? `${comments.length} คอมเมนต์` : "คอมเมนต์"}
+        <MessageCircle /> ความคิดเห็น
       </Button>
 
       {open ? (
-        <div className="mt-2 border-t border-border px-1 pt-3">
+        <div className="mt-2 basis-full border-t border-border px-1 pt-3">
           <div className="space-y-3">
             {comments.map((comment) => {
               const avatarUrl = comment.profiles?.avatar_path
@@ -138,6 +139,6 @@ export function PostComments({
           {message ? <p className="mt-2 text-xs text-destructive">{message}</p> : null}
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
