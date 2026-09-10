@@ -1,9 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, Eye, LockKeyhole, RefreshCw, Sparkles, Ticket, UserCheck, UserPlus } from "lucide-react";
 
+import {
+  type ConnectionKind,
+  type ProfilePost,
+  ProfileConnectionsSheet,
+  ProfilePosts,
+  ProfileSocialStats,
+  profilePostsSelect,
+} from "@/components/profile/profile-social";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +63,10 @@ function drawDate(value?: string) {
 }
 
 export function PublicProfilePage({ viewerId, profileUserId }: { viewerId: string; profileUserId: string }) {
+  const contentSection = useRef<HTMLDivElement>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [posts, setPosts] = useState<ProfilePost[]>([]);
+  const [postCount, setPostCount] = useState(0);
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [dreams, setDreams] = useState<Dream[]>([]);
   const [tickets, setTickets] = useState<SharedTicket[]>([]);
@@ -66,11 +77,14 @@ export function PublicProfilePage({ viewerId, profileUserId }: { viewerId: strin
   const [loadError, setLoadError] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [connectionKind, setConnectionKind] = useState<ConnectionKind | null>(null);
+  const [activeTab, setActiveTab] = useState("posts");
 
   const load = useCallback(async () => {
     const supabase = createClient();
-    const [profileResult, predictionResult, dreamResult, ticketResult, followersResult, followingResult, relationshipResult] = await Promise.all([
+    const [profileResult, postsResult, predictionResult, dreamResult, ticketResult, followersResult, followingResult, relationshipResult] = await Promise.all([
       supabase.from("profiles").select("display_name,username,avatar_path,bio,created_at").eq("id", profileUserId).single(),
+      supabase.from("posts").select(profilePostsSelect, { count: "exact" }).eq("author_id", profileUserId).eq("status", "published").order("created_at", { ascending: false }).order("position", { referencedTable: "post_media", ascending: true }).limit(50),
       supabase.from("user_predictions").select("id,title,source_type,created_at,lottery_draws(draw_date,status),prediction_numbers(id,number_value,number_kind)").eq("user_id", profileUserId).eq("is_public", true).eq("status", "submitted").order("created_at", { ascending: false }).limit(50),
       supabase.from("dreams").select("id,dream_text,created_at,dream_interpretations(id,meaning,lucky_element,numbers)").eq("user_id", profileUserId).eq("visibility", "public").order("created_at", { ascending: false }).limit(30),
       supabase.from("user_tickets").select("id,ticket_number,created_at,lottery_draws(draw_date,status)").eq("user_id", profileUserId).neq("visibility", "private").order("created_at", { ascending: false }).limit(50),
@@ -79,13 +93,15 @@ export function PublicProfilePage({ viewerId, profileUserId }: { viewerId: strin
       supabase.from("user_follows").select("following_id").eq("follower_id", viewerId).eq("following_id", profileUserId).maybeSingle(),
     ]);
 
-    if (profileResult.error || predictionResult.error || dreamResult.error || ticketResult.error || followersResult.error || followingResult.error || relationshipResult.error) {
+    if (profileResult.error || postsResult.error || predictionResult.error || dreamResult.error || ticketResult.error || followersResult.error || followingResult.error || relationshipResult.error) {
       setLoadError(true);
       setLoading(false);
       return;
     }
 
     setProfile(profileResult.data as Profile);
+    setPosts((postsResult.data ?? []) as unknown as ProfilePost[]);
+    setPostCount(postsResult.count ?? postsResult.data?.length ?? 0);
     setPredictions((predictionResult.data ?? []) as unknown as Prediction[]);
     setDreams((dreamResult.data ?? []) as unknown as Dream[]);
     setTickets((ticketResult.data ?? []) as unknown as SharedTicket[]);
@@ -138,15 +154,30 @@ export function PublicProfilePage({ viewerId, profileUserId }: { viewerId: strin
             {isSelf ? <Button asChild variant="outline" size="sm"><Link href="/profile">แก้ไขโปรไฟล์</Link></Button> : <Button type="button" variant={isFollowing ? "secondary" : "gold"} size="sm" disabled={followBusy} onClick={() => void toggleFollow()}>{isFollowing ? <UserCheck /> : <UserPlus />}{isFollowing ? "ติดตามแล้ว" : "ติดตาม"}</Button>}
           </div>
           {profile.bio ? <p className="mt-4 text-sm leading-6 text-muted-foreground">{profile.bio}</p> : null}
-          <div className="mt-4 flex items-center gap-4 text-xs"><span><strong className="text-foreground">{followers}</strong> <span className="text-muted-foreground">ผู้ติดตาม</span></span><span><strong className="text-foreground">{following}</strong> <span className="text-muted-foreground">กำลังติดตาม</span></span></div>
+          <ProfileSocialStats
+            posts={postCount}
+            followers={followers}
+            following={following}
+            onPostsClick={() => {
+              setActiveTab("posts");
+              contentSection.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            onFollowersClick={() => setConnectionKind("followers")}
+            onFollowingClick={() => setConnectionKind("following")}
+          />
           {message ? <p className="mt-3 text-xs text-destructive">{message}</p> : null}
         </CardContent>
       </Card>
 
       <div className="flex items-start gap-2 rounded-2xl border border-border bg-muted/50 px-4 py-3 text-xs leading-5 text-muted-foreground"><LockKeyhole className="mt-0.5 size-4 shrink-0 text-primary" /><p>หน้านี้แสดงเฉพาะสิ่งที่เจ้าของเลือกแชร์ ความฝันส่วนตัวและสลากที่ตั้งเป็นส่วนตัวจะไม่ปรากฏ แม้คุณจะติดตามแล้ว</p></div>
 
-      <Tabs defaultValue="numbers">
-        <TabsList><TabsTrigger value="numbers">ชุดเลข</TabsTrigger><TabsTrigger value="dreams">ความฝัน</TabsTrigger><TabsTrigger value="tickets">สลากที่ซื้อ</TabsTrigger></TabsList>
+      <div ref={contentSection} className="scroll-mt-20">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-4"><TabsTrigger value="posts">โพสต์</TabsTrigger><TabsTrigger value="numbers">ชุดเลข</TabsTrigger><TabsTrigger value="dreams">ความฝัน</TabsTrigger><TabsTrigger value="tickets">สลาก</TabsTrigger></TabsList>
+
+        <TabsContent value="posts" className="space-y-3">
+          <ProfilePosts posts={posts} ownerLabel="สมาชิกคนนี้" />
+        </TabsContent>
 
         <TabsContent value="numbers" className="space-y-3">
           {predictions.map((prediction) => <Card key={prediction.id}><CardHeader className="p-4 pb-2"><div className="flex items-start justify-between gap-3"><div><CardTitle className="text-sm">{prediction.title ?? "ชุดเลขที่แชร์"}</CardTitle><p className="mt-1 text-[11px] text-muted-foreground">งวด {drawDate(prediction.lottery_draws?.draw_date)} · {sourceLabels[prediction.source_type] ?? prediction.source_type}</p></div><Badge variant="outline"><Eye className="size-3" /> สาธารณะ</Badge></div></CardHeader><CardContent className="flex flex-wrap gap-2 p-4 pt-2">{prediction.prediction_numbers.map((number) => <span key={number.id} className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 font-display text-lg font-bold tracking-wider text-primary">{number.number_value}</span>)}</CardContent></Card>)}
@@ -166,6 +197,18 @@ export function PublicProfilePage({ viewerId, profileUserId }: { viewerId: strin
           {!tickets.length ? <Empty icon={Ticket} title="ไม่มีสลากที่แชร์ให้คุณเห็น" detail={isFollowing ? "เจ้าของยังไม่ได้แชร์สลากกับผู้ติดตาม" : "ติดตามผู้ใช้นี้เพื่อดูสลากที่เขาเลือกแชร์เฉพาะผู้ติดตาม"} /> : null}
         </TabsContent>
       </Tabs>
+      </div>
+
+      <ProfileConnectionsSheet
+        kind={connectionKind}
+        profileUserId={profileUserId}
+        viewerId={viewerId}
+        profileDisplayName={profile.display_name}
+        onOpenChange={(open) => {
+          if (!open) setConnectionKind(null);
+        }}
+        onChanged={load}
+      />
     </div>
   );
 }
