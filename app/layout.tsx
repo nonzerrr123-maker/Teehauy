@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 
 import { ServiceWorkerRegister } from "@/components/service-worker-register";
+import { ThemeSync } from "@/components/theme-sync";
 
 import "./globals.css";
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         {children}
+        <ThemeSync />
         <ServiceWorkerRegister />
       </body>
     </html>

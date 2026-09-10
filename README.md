@@ -1,16 +1,29 @@
 # Teehauy
 
-Next.js implementation of the Dream Lottery Number App UI referenced from Figma Make.
+Teehauy คือเว็บแอป mobile-first สำหรับตีเลขจากความฝัน เก็บเลขและสลากตามงวด ติดตามผลรางวัล และแลกเปลี่ยนชุดเลขในชุมชน
 
 ## Stack
 
-- Next.js App Router
-- React + TypeScript
-- Tailwind CSS v4
-- Recharts
-- Neon/PostgreSQL via `@neondatabase/serverless`
+- Next.js 16 App Router, React 19 และ TypeScript
+- Tailwind CSS 4 และ shadcn/ui
+- Supabase Database, Auth และ Storage
+- Recharts สำหรับกราฟสถิติ
+- Vercel สำหรับ production และ preview deployments
 
-## Run locally
+## ฟีเจอร์ปัจจุบัน
+
+- Google Login และ Guest Login ผ่าน Supabase Anonymous Auth
+- เชื่อมบัญชี Guest เดิมกับ Google โดยเก็บข้อมูลเดิมไว้
+- ตีเลขจากข้อความความฝัน บันทึกผล และเลือกเผยแพร่สู่ชุมชน
+- บันทึกสลากจริง 6 หลัก กำหนดการมองเห็น และตรวจเลขกับผลทางการ
+- ผลสลากย้อนหลัง สถิติ และการวิเคราะห์งวดถัดไป
+- โพสต์ คอมเมนต์ Like บันทึกโพสต์ และ Follow/Unfollow
+- โปรไฟล์สมาชิกสาธารณะพร้อม privacy สำหรับความฝัน ชุดเลข และสลาก
+- ธีมสว่าง มืด และตามการตั้งค่าระบบ
+
+## เริ่มต้นในเครื่อง
+
+ต้องใช้ Node.js รุ่นที่รองรับ Next.js 16 และ Supabase project ที่ตั้งค่า Anonymous Auth กับ Google OAuth แล้ว
 
 ```bash
 npm install
@@ -18,48 +31,35 @@ cp .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000.
+กำหนดค่าต่อไปนี้ใน `.env.local`:
 
-`DATABASE_URL` is optional while developing the UI. Without it, Teehauy keeps history and favorites in browser storage. When a database connection and the migrations are available, the same UI also persists server-side.
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+```
 
-## Database
+เปิด <http://localhost:3000> ห้าม commit secret หรือ service-role key ลง repository
 
-1. Create a PostgreSQL/Neon database.
-2. Apply `database/001_dream_persistence.sql`.
-3. Apply `database/002_auth.sql` to enable accounts and sessions.
-4. Put the connection string in `DATABASE_URL` inside `.env.local` or the deployment environment.
-5. Never commit the real connection string.
+## Supabase
 
-Guest sessions are represented by a random browser token. The server hashes that token with SHA-256 before using it as the database owner key; the raw token is not written to the persistence tables.
+Schema, functions, indexes และ RLS อยู่ใน `supabase/migrations/` ให้นำ migration ใหม่ขึ้นตามลำดับเวลาและตรวจ Security/Performance Advisors ทุกครั้งที่แก้ฐานข้อมูล
 
-Account sessions use a random opaque token stored in an HttpOnly, SameSite=Lax cookie. Only a SHA-256 hash of the session token is stored in PostgreSQL. Passwords are stored as salted scrypt hashes. When a guest registers or signs in, persisted guest dream history/favorites from that browser are claimed by the account so the history is not lost.
+หลักสำคัญของข้อมูล:
 
-## Current flow
+- Guest เป็น Supabase user จริง ข้อมูลจึงผูกกับ user ID เช่นเดียวกับบัญชี Google
+- Anonymous session อยู่กับ browser storage เดิม การ sign out หรือล้างข้อมูลเว็บไซต์ก่อนเชื่อม Google อาจทำให้กู้บัญชี Guest เดิมไม่ได้
+- ความฝันและ prediction เป็น private โดยค่าเริ่มต้น
+- สลากเป็น private โดยค่าเริ่มต้น และเจ้าของเลือก `followers` หรือ `public` แยกต่อใบ
+- ข้อมูลผลรางวัลจะใช้คำนวณหลังผ่านขั้นตอนตรวจสอบแล้วเท่านั้น
 
-- ตีเลขฝันจากข้อความหรือหมวดยอดนิยมผ่าน `/api/dream/interpret`
-- หน้าผลการตีเลข + favorite/share
-- คลังฝันพร้อมค้นหาและกรองหมวด
-- ประวัติและรายการโปรด พร้อม local fallback และ database sync
-- สมัครสมาชิก / เข้าสู่ระบบ / ออกจากระบบจากหน้าโปรไฟล์
-- เมื่อเข้าสู่ระบบ ประวัติใหม่จะผูกกับบัญชีแทน guest browser identity
-- สถิติหวยย้อนหลังผ่าน provider API พร้อม fallback เมื่อ provider ยังไม่ได้ตั้งค่า
-- โปรไฟล์และการตั้งค่าการแจ้งเตือน
-
-## API
-
-### Dream
-
-- `POST /api/dream/interpret` — validate + interpret a dream, optionally persist it
-- `GET /api/dream/history` — load history and favorites for the signed-in account or guest identity
-- `POST /api/dream/favorite` — add/remove a persisted interpretation from favorites
-
-### Auth
-
-- `POST /api/auth/register` — create an account, claim guest data, and create a session
-- `POST /api/auth/login` — authenticate, claim guest data, and create a session
-- `GET /api/auth/session` — read current account session
-- `POST /api/auth/logout` — revoke the current session and clear the cookie
+รายละเอียด migration และการนำเข้าผลสลากอยู่ที่ [`supabase/README.md`](supabase/README.md)
 
 ## Quality checks
 
-GitHub Actions runs `npm run lint` and `npm run build` for `main`, feature branches, and pull requests. Vercel also builds the latest `main` commit.
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+GitHub Actions และ Vercel ตรวจ branch/PR ก่อนนำ `main` ขึ้น production

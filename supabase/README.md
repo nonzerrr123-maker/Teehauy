@@ -9,6 +9,15 @@ Applied migrations:
 - `20260909102117_prediction_submission_and_schedule`: atomic prediction submission and scheduled draw visibility.
 - `20260909103625_official_lottery_import`: service-role-only verified result import, checksum/audit and result matching.
 - `20260909152444_mobile_product_workflows`: atomic community post + prediction creation and dream-to-draw prediction locking.
+- `20260909201352_light_theme_community_profile_and_matching`: light/system themes, community profile fields and ticket matching support.
+- `20260909203726_harden_manual_prediction_submission`: validated manual prediction submission and stricter write paths.
+- `20260910002247_add_analysis_subset_lottery_history`: verified historical draw subset used by statistics and analysis.
+- `20260910042527_social_comments_follow_visibility`: comments, follows, public profiles and ticket visibility with RLS.
+- `20260910042933_allow_authenticated_scheduled_draws`: scheduled draw visibility for signed-in users.
+- `20260910043227_fix_dream_publication_prediction_reference`: corrected prediction references during public dream publishing.
+- `20260910043550_harden_dream_publication_idempotency`: idempotent public dream and community post creation.
+- `20260910043906_consolidate_ticket_visibility_policies`: one consolidated read policy for ticket visibility.
+- `20260910105614_default_theme_system`: system theme default plus migration of untouched legacy defaults.
 
 Both Edge Functions require a valid JWT and an `admin` row in `user_roles`. Anonymous Auth and manual identity linking must be enabled in Auth settings; Google additionally needs the Google OAuth client credentials.
 

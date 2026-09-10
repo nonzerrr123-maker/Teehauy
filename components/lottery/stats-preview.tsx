@@ -38,7 +38,7 @@ export function StatsPreview() {
           <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">{latest ? <BarChart3 className="size-5" /> : <Database className="size-5" />}</span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2"><strong className="text-sm">สถิติผลรางวัล</strong><Badge variant={latest ? "default" : "secondary"}>{latest ? `${stats?.draws.length ?? 0} งวด` : "รอข้อมูล"}</Badge></div>
-            {latest ? <p className="mt-1 text-xs text-muted-foreground">ล่าสุด {latest.date} · รางวัลที่ 1 <span className="font-semibold text-foreground">{latest.first}</span> · 2 ตัวล่าง <span className="font-semibold text-primary">{latest.bottom}</span></p> : <p className="mt-1 text-xs leading-5 text-muted-foreground">ฐาน production ยังไม่มีผลที่ผ่านการยืนยัน ระบบจึงไม่สร้างสถิติจำลองมาปะปน</p>}
+            {latest ? <p className="mt-1 text-xs text-muted-foreground">ล่าสุด {latest.date} · รางวัลที่ 1 <span className="font-semibold text-foreground">{latest.first}</span> · 2 ตัวล่าง <span className="font-semibold text-primary">{latest.bottom}</span></p> : <p className="mt-1 text-xs leading-5 text-muted-foreground">ยังไม่มีผลรางวัลที่ผ่านการตรวจสอบและพร้อมแสดง</p>}
           </div>
         </div>
         <Button asChild variant="ghost" size="sm" className="mt-2 w-full justify-between"><Link href="/stats">ดูสถิติและสถานะแหล่งข้อมูล <ArrowRight /></Link></Button>

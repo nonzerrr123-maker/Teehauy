@@ -47,10 +47,10 @@ export function StatsPage() {
       <Card className="border-primary/15">
         <CardHeader className="flex flex-row items-start justify-between gap-3 p-4 pb-2">
           <div><CardTitle className="flex items-center gap-2 text-sm"><Database className="size-4 text-primary" /> แหล่งข้อมูล</CardTitle><p className="mt-1 text-xs leading-5 text-muted-foreground">{stats.sourceLabel}</p></div>
-          <Badge variant={hasDraws ? "default" : "secondary"}>{hasDraws ? "OFFICIAL" : "WAITING"}</Badge>
+          <Badge variant={hasDraws ? "default" : "secondary"}>{hasDraws ? "ข้อมูลทางการ" : "รอผล"}</Badge>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3 p-4 pt-2">
-          <p className="text-[11px] leading-4 text-muted-foreground">แสดงเฉพาะงวดที่นำเข้าและผ่านการตรวจสอบ ไม่ใช้ข้อมูลจำลอง</p>
+          <p className="text-[11px] leading-4 text-muted-foreground">แสดงเฉพาะผลรางวัลที่ผ่านการตรวจสอบแล้ว</p>
           <Button asChild variant="ghost" size="icon"><a href="https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01" target="_blank" rel="noreferrer" aria-label="เปิดชุดข้อมูลสำนักงานสลากกินแบ่งรัฐบาล"><ExternalLink /></a></Button>
         </CardContent>
       </Card>
