@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { CheckCircle2, Clock3, Plus, Sparkles, Ticket } from "lucide-react";
+import { CheckCircle2, Clock3, LoaderCircle, Plus, RefreshCw, Sparkles, Ticket } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,9 @@ export function TicketsPage({ userId }: { userId: string }) {
   const [number, setNumber] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -40,11 +43,18 @@ export function TicketsPage({ userId }: { userId: string }) {
       supabase.from("user_predictions").select("id,title,source_type,created_at,lottery_draws(id,draw_date,status),prediction_numbers(id,number_value,number_kind,prediction_matches(id,match_kind,lottery_prizes(prize_type,prize_amount)))").eq("status", "submitted").order("created_at", { ascending: false }).limit(100),
       supabase.from("user_tickets").select("id,ticket_number,quantity,lottery_draws(id,draw_date,status),ticket_wins(id,prize_amount)").order("created_at", { ascending: false }).limit(100),
     ]);
+    if (drawResponse.error || predictionResponse.error || ticketResponse.error) {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setLoadError(false);
     const nextDraws = (drawResponse.data ?? []) as Draw[];
     setDraws(nextDraws);
-    setDrawId((current) => current || nextDraws.find((draw) => draw.status === "scheduled")?.id || nextDraws[0]?.id || "");
+    setDrawId((current) => nextDraws.some((draw) => draw.id === current && draw.status === "scheduled") ? current : nextDraws.find((draw) => draw.status === "scheduled")?.id ?? "");
     setPredictions((predictionResponse.data ?? []) as unknown as Prediction[]);
     setTickets((ticketResponse.data ?? []) as unknown as SavedTicket[]);
+    setLoading(false);
   }, []);
 
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
@@ -58,12 +68,18 @@ export function TicketsPage({ userId }: { userId: string }) {
     event.preventDefault();
     if (!/^\d{6}$/.test(number)) return setMessage("เลขสลากต้องมี 6 หลัก");
     if (!drawId) return setMessage("เลือกงวดก่อนบันทึก");
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) return setMessage("จำนวนสลากต้องอยู่ระหว่าง 1-100 ใบ");
+    setSaving(true); setMessage(null);
     const { error } = await createClient().from("user_tickets").upsert({ user_id: userId, draw_id: drawId, ticket_number: number, quantity }, { onConflict: "user_id,draw_id,ticket_number" });
+    setSaving(false);
     if (error) return setMessage(`บันทึกไม่สำเร็จ: ${error.message}`);
     setNumber("");
     setMessage("บันทึกสลากแล้ว");
     await load();
   };
+
+  if (loading) return <div className="space-y-3"><div className="h-20 animate-pulse rounded-2xl bg-muted" /><div className="h-48 animate-pulse rounded-2xl bg-muted" /></div>;
+  if (loadError) return <Alert variant="destructive"><AlertDescription>โหลดสลากของฉันไม่สำเร็จ กรุณาลองใหม่</AlertDescription><Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => { setLoading(true); void load(); }}><RefreshCw /> ลองใหม่</Button></Alert>;
 
   return (
     <div className="space-y-5">
@@ -83,7 +99,7 @@ export function TicketsPage({ userId }: { userId: string }) {
         </TabsContent>
 
         <TabsContent value="tickets" className="space-y-4">
-          <Card><CardHeader className="p-4 pb-2"><CardTitle className="text-base">เพิ่มสลากที่ซื้อจริง</CardTitle></CardHeader><CardContent><form onSubmit={submitTicket} className="space-y-3"><div className="space-y-2"><Label htmlFor="ticket-draw">งวด</Label><NativeSelect id="ticket-draw" value={drawId} onChange={(event) => setDrawId(event.target.value)}>{draws.filter((draw) => draw.status === "scheduled").map((draw) => <option key={draw.id} value={draw.id}>{dateLabel(draw.draw_date)}</option>)}</NativeSelect></div><div className="grid grid-cols-[1fr_82px] gap-3"><div className="space-y-2"><Label htmlFor="ticket-number">เลข 6 หลัก</Label><Input id="ticket-number" inputMode="numeric" maxLength={6} value={number} onChange={(event) => setNumber(event.target.value.replace(/\D/g, ""))} placeholder="123456" className="tabular-nums" /></div><div className="space-y-2"><Label htmlFor="ticket-quantity">จำนวนใบ</Label><Input id="ticket-quantity" type="number" min={1} max={100} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div></div><Button type="submit" variant="gold" className="w-full" disabled={!drawId}><Plus /> บันทึกสลาก</Button>{message ? <Alert><AlertDescription>{message}</AlertDescription></Alert> : null}</form></CardContent></Card>
+          <Card><CardHeader className="p-4 pb-2"><CardTitle className="text-base">เพิ่มสลากที่ซื้อจริง</CardTitle></CardHeader><CardContent><form onSubmit={submitTicket} className="space-y-3"><div className="space-y-2"><Label htmlFor="ticket-draw">งวด</Label><NativeSelect id="ticket-draw" value={drawId} disabled={!draws.some((draw) => draw.status === "scheduled")} onChange={(event) => setDrawId(event.target.value)}>{draws.some((draw) => draw.status === "scheduled") ? draws.filter((draw) => draw.status === "scheduled").map((draw) => <option key={draw.id} value={draw.id}>{dateLabel(draw.draw_date)}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับสลาก</option>}</NativeSelect></div><div className="grid grid-cols-[1fr_82px] gap-3"><div className="space-y-2"><Label htmlFor="ticket-number">เลข 6 หลัก</Label><Input id="ticket-number" inputMode="numeric" maxLength={6} value={number} onChange={(event) => setNumber(event.target.value.replace(/\D/g, ""))} placeholder="123456" className="tabular-nums" /></div><div className="space-y-2"><Label htmlFor="ticket-quantity">จำนวนใบ</Label><Input id="ticket-quantity" type="number" min={1} max={100} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div></div><Button type="submit" variant="gold" className="w-full" disabled={!drawId || saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Plus />} {saving ? "กำลังบันทึก..." : "บันทึกสลาก"}</Button>{message ? <Alert><AlertDescription>{message}</AlertDescription></Alert> : null}</form></CardContent></Card>
           {tickets.map((item) => <Card key={item.id}><CardContent className="flex items-center gap-3 p-4"><span className="flex size-11 items-center justify-center rounded-xl bg-secondary"><Ticket className="size-5 text-primary" /></span><div className="min-w-0 flex-1"><strong className="font-display text-xl tracking-[.15em] text-primary">{item.ticket_number}</strong><p className="text-[11px] text-muted-foreground">งวด {dateLabel(item.lottery_draws?.draw_date)} · {item.quantity} ใบ</p></div>{item.ticket_wins.length ? <CheckCircle2 className="size-5 text-success" /> : <Clock3 className="size-5 text-muted-foreground" />}</CardContent></Card>)}
           {!tickets.length ? <Empty icon={Ticket} title="ยังไม่ได้บันทึกสลาก" detail="สแกนหรือกรอกเลข 6 หลัก เพื่อรวมการตรวจผลไว้ในหน้าเดียว" /> : null}
         </TabsContent>

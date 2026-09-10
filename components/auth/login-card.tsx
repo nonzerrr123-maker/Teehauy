@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Cloud, LoaderCircle, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AnimatedWordmark } from "@/components/brand/animated-wordmark";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -40,7 +41,7 @@ export function LoginCard({ nextPath, oauthError = false }: { nextPath: string; 
   return (
     <Card className="relative z-10 w-full max-w-md overflow-hidden border-primary/15 shadow-[0_32px_100px_rgba(0,0,0,.48)]">
       <div className="h-1 bg-[linear-gradient(90deg,transparent,#d8b568,transparent)]" />
-      <CardHeader className="items-center px-6 pb-4 pt-8 text-center"><span className="mb-3 flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/8"><Sparkles className="size-7 text-primary" /></span><p className="text-[10px] font-semibold uppercase tracking-[.28em] text-primary">Dream · Number · Community</p><h1 className="font-display text-4xl font-bold">ตีหวย</h1><p className="max-w-xs text-sm leading-6 text-muted-foreground">ตีเลขจากความฝัน เก็บเลขตามงวด และติดตามผลทางการในที่เดียว</p></CardHeader>
+      <CardHeader className="items-center px-6 pb-4 pt-8 text-center"><span className="mb-3 flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/8"><Sparkles className="size-7 text-primary" /></span><p className="text-[10px] font-semibold uppercase tracking-[.28em] text-primary">Dream · Number · Community</p><AnimatedWordmark /><p className="max-w-xs text-sm leading-6 text-muted-foreground">ตีเลขจากความฝัน เก็บเลขตามงวด และติดตามผลทางการในที่เดียว</p></CardHeader>
       <CardContent className="space-y-5 px-6 pb-7">
         {mode === "guest" ? <Alert><ShieldCheck className="size-4" /><AlertDescription>คุณใช้บัญชี Guest อยู่ ข้อมูลถูกเก็บใน Supabase ครบเหมือน Google และเชื่อมบัญชีภายหลังได้</AlertDescription></Alert> : null}
         {mode === "google" ? <Alert><Cloud className="size-4" /><AlertDescription>บัญชี Google พร้อมแล้ว ข้อมูลของคุณซิงก์ข้ามอุปกรณ์ได้</AlertDescription></Alert> : null}

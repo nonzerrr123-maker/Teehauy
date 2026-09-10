@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, BarChart3, BookHeart, MessageCircle, Sparkles, TicketCheck } from "lucide-react";
 
+import { AnimatedWordmark } from "@/components/brand/animated-wordmark";
+import { StatsPreview } from "@/components/lottery/stats-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +20,7 @@ export function HomePage({ onInterpret, isLoading, error }: { onInterpret: (text
   return (
     <main className="page-enter mx-auto w-full max-w-2xl px-4 pb-5 pt-[max(env(safe-area-inset-top),1.5rem)] sm:px-6">
       <header className="mb-6 flex items-center justify-between">
-        <div><p className="text-[11px] font-semibold uppercase tracking-[.22em] text-primary">Dream to number</p><h1 className="font-display text-3xl font-bold">ตีหวย</h1></div>
+        <div><p className="mb-1 text-[11px] font-semibold uppercase tracking-[.22em] text-primary">Dream to number</p><AnimatedWordmark compact /></div>
         <Badge variant="outline" className="border-success/25 bg-success/8 text-success">ระบบพร้อมใช้งาน</Badge>
       </header>
 
@@ -36,10 +38,12 @@ export function HomePage({ onInterpret, isLoading, error }: { onInterpret: (text
         {error ? <Alert variant="destructive" className="mt-3"><AlertDescription>{error}</AlertDescription></Alert> : null}
       </section>
 
+      <StatsPreview />
+
       <section className="mb-7">
         <div className="mb-3 flex items-end justify-between"><div><h2 className="font-semibold">ฝันยอดนิยม</h2><p className="text-xs text-muted-foreground">แตะเพื่อดูคำตีความทันที</p></div><Link href="/dreams" className="flex items-center gap-1 text-xs font-semibold text-primary">ดูคลังฝัน <ArrowRight className="size-3.5" /></Link></div>
         <div className="grid grid-cols-4 gap-2">
-          {quickCategories.slice(0, 8).map((item) => <button key={item.label} type="button" disabled={isLoading} onClick={() => submit(`ฝันเห็น${item.label}`)} className="flex min-h-20 flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-card px-1 transition-colors hover:border-primary/30 disabled:opacity-50"><span className="text-2xl">{item.emoji}</span><span className="text-xs text-muted-foreground">{item.label}</span></button>)}
+          {quickCategories.slice(0, 8).map((item) => <Button key={item.label} type="button" variant="outline" disabled={isLoading} onClick={() => submit(`ฝันเห็น${item.label}`)} className="h-auto min-h-20 flex-col gap-1 rounded-2xl bg-card px-1 font-normal hover:border-primary/30"><span className="text-2xl">{item.emoji}</span><span className="text-xs text-muted-foreground">{item.label}</span></Button>)}
         </div>
       </section>
 

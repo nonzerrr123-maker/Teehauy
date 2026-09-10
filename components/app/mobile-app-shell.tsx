@@ -6,6 +6,7 @@ import { Home, MoonStar, Plus, TicketCheck, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { PostComposer } from "@/components/community/post-composer";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -28,7 +29,7 @@ export function MobileAppShell({ children, userId }: { children: ReactNode; user
     <div className="mobile-shell min-h-dvh">
       <div className="page-surface min-h-dvh pb-safe-nav">{children}</div>
 
-      <nav aria-label="เมนูหลัก" className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[760px] border-t border-white/8 bg-background/96 px-2 pt-2 shadow-[0_-14px_36px_rgba(0,0,0,.34)] backdrop-blur-xl">
+      <nav aria-label="เมนูหลัก" className="fixed inset-x-0 bottom-0 z-40 mx-auto w-full max-w-[760px] border-t border-border bg-background/96 px-2 pt-2 shadow-[0_-14px_36px_var(--shadow-color)] backdrop-blur-xl">
         <div className="grid grid-cols-5 items-end safe-bottom">
           {navItems.slice(0, 2).map((item) => {
             const active = isActive(pathname, item.href);
@@ -42,10 +43,10 @@ export function MobileAppShell({ children, userId }: { children: ReactNode; user
           })}
 
           <PostComposer userId={userId}>
-            <button type="button" aria-label="สร้างโพสต์ชุมชน" className="soft-pulse mx-auto -mt-7 flex size-16 flex-col items-center justify-center rounded-full border-[5px] border-background bg-primary text-primary-foreground shadow-[0_12px_32px_rgba(216,181,104,.25)] transition-transform active:scale-95">
+            <Button type="button" size="icon" aria-label="สร้างโพสต์ชุมชน" className="soft-pulse mx-auto -mt-7 size-16 rounded-full border-[5px] border-background shadow-[0_12px_32px_rgba(216,181,104,.25)]">
               <Plus className="size-7" strokeWidth={2.5} />
               <span className="sr-only">โพสต์</span>
-            </button>
+            </Button>
           </PostComposer>
 
           {navItems.slice(2).map((item) => {

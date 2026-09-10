@@ -13,6 +13,10 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ ok: false, message: "กรุณาเข้าสู่ระบบก่อนตีเลข" }, { status: 401 });
   const limit = await supabase.rpc("check_rate_limit", { p_operation: "dream_interpret", p_limit: 20, p_window_seconds: 60 });
   if (limit.error || limit.data !== true) return NextResponse.json({ ok: false, message: "ตีเลขถี่เกินไป กรุณารอสักครู่" }, { status: 429 });
-  const result = await saveDreamInterpretation(interpretDream(payload.dreamText.trim()));
-  return NextResponse.json({ ok: true, result, persisted: true, authenticated: true }, { headers: { "Cache-Control": "no-store" } });
+  try {
+    const result = await saveDreamInterpretation(interpretDream(payload.dreamText.trim()));
+    return NextResponse.json({ ok: true, result, persisted: true, authenticated: true }, { headers: { "Cache-Control": "no-store" } });
+  } catch {
+    return NextResponse.json({ ok: false, message: "ยังบันทึกผลการตีเลขไม่ได้" }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
 }

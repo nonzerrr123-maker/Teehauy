@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bookmark, Heart, MoreHorizontal, Sparkles } from "lucide-react";
+import { Bookmark, Heart, MoreHorizontal, RefreshCw, Sparkles } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -24,12 +24,13 @@ type Post = {
 export function CommunityPage({ userId }: { userId: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const { data, error } = await createClient().from("posts").select("id,author_id,body,created_at,related_prediction_id,profiles!posts_author_id_fkey(display_name,username,avatar_path),post_reactions(user_id,reaction),saved_posts(user_id),user_predictions!posts_related_prediction_id_fkey(prediction_numbers(number_value,number_kind))").eq("status", "published").order("created_at", { ascending: false }).limit(50);
-    if (error) setMessage("โหลดชุมชนไม่สำเร็จ");
-    else setPosts((data ?? []) as unknown as Post[]);
+    const { data, error } = await createClient().from("posts").select("id,author_id,body,created_at,related_prediction_id,profiles!posts_author_profile_fkey(display_name,username,avatar_path),post_reactions(user_id,reaction),saved_posts(user_id),user_predictions!posts_related_prediction_id_fkey(prediction_numbers(number_value,number_kind))").eq("status", "published").order("created_at", { ascending: false }).limit(50);
+    if (error) setLoadError(true);
+    else { setPosts((data ?? []) as unknown as Post[]); setLoadError(false); }
     setLoading(false);
   }, []);
 
@@ -61,7 +62,9 @@ export function CommunityPage({ userId }: { userId: string }) {
     setMessage(error ? "ส่งรายงานไม่สำเร็จ" : "ส่งรายงานให้ทีมตรวจสอบแล้ว");
   };
 
-  if (loading) return <div className="py-20 text-center text-sm text-muted-foreground">กำลังโหลดชุมชน...</div>;
+  if (loading) return <div className="space-y-3"><div className="h-20 animate-pulse rounded-2xl bg-muted" /><div className="h-44 animate-pulse rounded-2xl bg-muted" /><div className="h-44 animate-pulse rounded-2xl bg-muted" /></div>;
+
+  if (loadError) return <Card><CardContent className="flex flex-col items-center py-14 text-center"><span className="mb-3 flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive"><RefreshCw className="size-6" /></span><strong className="text-sm">โหลดชุมชนไม่สำเร็จ</strong><p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">การเชื่อมต่อข้อมูลโพสต์ขัดข้อง กรุณาลองโหลดใหม่อีกครั้ง</p><Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { setLoading(true); void load(); }}><RefreshCw /> ลองใหม่</Button></CardContent></Card>;
 
   return (
     <div className="space-y-4">

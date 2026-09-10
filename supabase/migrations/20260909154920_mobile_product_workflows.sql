@@ -1,3 +1,4 @@
+-- Applied to teehuay as remote migration 20260909154920.
 begin;
 
 -- Creates an optional prediction and its community post as one transaction.
