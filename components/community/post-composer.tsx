@@ -33,14 +33,18 @@ export function PostComposer({ children, userId }: { children: ReactNode; userId
   const [draws, setDraws] = useState<Draw[]>([]);
   const [drawId, setDrawId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [drawsLoading, setDrawsLoading] = useState(false);
+  const [drawError, setDrawError] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const numbers = useMemo(() => parseNumbers(body), [body]);
 
   useEffect(() => {
     if (!open || draws.length) return;
     let active = true;
-    void createClient().from("lottery_draws").select("id, draw_date, status").eq("status", "scheduled").order("draw_date").limit(12).then(({ data }) => {
+    void createClient().from("lottery_draws").select("id, draw_date, status").eq("status", "scheduled").order("draw_date").limit(12).then(({ data, error }) => {
       if (!active) return;
+      setDrawsLoading(false);
+      if (error) { setDrawError(true); return; }
       const next = (data ?? []) as Draw[];
       setDraws(next);
       setDrawId(next.find((draw) => draw.status === "scheduled")?.id ?? next[0]?.id ?? "");
@@ -67,7 +71,7 @@ export function PostComposer({ children, userId }: { children: ReactNode; userId
   };
 
   return (
-    <Sheet open={open} onOpenChange={(next) => { setOpen(next); if (!next) setMessage(null); }}>
+    <Sheet open={open} onOpenChange={(next) => { setOpen(next); if (next && !draws.length) { setDrawsLoading(true); setDrawError(false); } if (!next) setMessage(null); }}>
       <SheetTrigger asChild>{children}</SheetTrigger>
       <SheetContent className="overflow-y-auto">
         <SheetHeader>
@@ -87,15 +91,16 @@ export function PostComposer({ children, userId }: { children: ReactNode; userId
               <div className="flex flex-wrap gap-2">{numbers.map((item) => <Badge key={`${item.kind}-${item.value}`} variant="outline" className="border-primary/25 bg-background text-primary">{item.value}</Badge>)}</div>
               <div className="space-y-2">
                 <Label htmlFor="composer-draw">บันทึกเข้ากับงวด</Label>
-                <NativeSelect id="composer-draw" value={drawId} onChange={(event) => setDrawId(event.target.value)}>
-                  {draws.map((draw) => <option key={draw.id} value={draw.id}>{drawLabel(draw.draw_date)}{draw.status === "scheduled" ? " · งวดถัดไป" : ""}</option>)}
+                <NativeSelect id="composer-draw" value={drawId} disabled={drawsLoading || drawError || !draws.length} onChange={(event) => setDrawId(event.target.value)}>
+                  {drawsLoading ? <option value="">กำลังโหลดงวด...</option> : draws.length ? draws.map((draw) => <option key={draw.id} value={draw.id}>{drawLabel(draw.draw_date)}{draw.status === "scheduled" ? " · งวดถัดไป" : ""}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับเลข</option>}
                 </NativeSelect>
+                {drawError ? <p className="text-xs text-destructive">โหลดงวดไม่สำเร็จ กรุณาปิดแล้วลองเปิดใหม่</p> : null}
               </div>
             </div>
           ) : null}
 
           {message ? <Alert variant="destructive"><AlertDescription>{message}</AlertDescription></Alert> : null}
-          <Button type="button" variant="gold" size="lg" className="w-full" disabled={busy || !body.trim()} onClick={() => void submit()}>
+          <Button type="button" variant="gold" size="lg" className="w-full" disabled={busy || !body.trim() || (numbers.length > 0 && !drawId)} onClick={() => void submit()}>
             {busy ? <><LoaderCircle className="animate-spin" /> กำลังโพสต์...</> : "โพสต์เข้าชุมชน"}
           </Button>
           <p className="text-center text-[10px] leading-4 text-muted-foreground">เพื่อความบันเทิงเท่านั้น โปรดไม่เผยแพร่ข้อมูลส่วนตัวหรือชักชวนเล่นพนัน</p>

@@ -14,7 +14,7 @@ Both Edge Functions require a valid JWT and an `admin` row in `user_roles`. Anon
 
 ## Official lottery provider
 
-The primary source is the Government Lottery Office (GLO) public dataset. Browser clients must not call it directly; use the `ingest-lottery-results` Edge Function with `{ "mode": "fetch_latest" }` from an authenticated admin account.
+The primary source is the Government Lottery Office (GLO) public dataset. Browser clients must not call it directly. From an authenticated admin account, use the `ingest-lottery-results` Edge Function with `{ "mode": "fetch_latest" }` for a complete draw, or `{ "mode": "fetch_history", "dates": ["2026-09-01"] }` to import the first, front-three, last-three, and last-two prizes used by statistics and analysis.
 
 - Latest draw catalog: <https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01/resource/0846af20-af93-498c-91d9-644a885733f7>
 - Draw by date catalog: <https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01/resource/64b39af8-fd9a-4eab-87d4-9193768c3812>

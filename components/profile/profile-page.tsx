@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, ChevronRight, Edit3, LoaderCircle, Settings, ShieldCheck } from "lucide-react";
+import { Camera, ChevronRight, Edit3, LoaderCircle, RefreshCw, Settings, ShieldCheck } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,8 @@ export function AccountPage({ userId }: { userId: string }) {
   const [bio, setBio] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -36,11 +38,16 @@ export function AccountPage({ userId }: { userId: string }) {
       supabase.from("user_predictions").select("id", { count: "exact", head: true }),
       supabase.from("posts").select("id", { count: "exact", head: true }).eq("author_id", userId),
     ]);
+    if (profileResult.error || dreams.error || predictions.error || posts.error) {
+      setLoadError(true); setLoading(false); return;
+    }
+    setLoadError(false);
     if (profileResult.data) {
       const next = profileResult.data as Profile;
       setProfile(next); setName(next.display_name); setUsername(next.username ?? ""); setBio(next.bio ?? "");
     }
     setCounts({ dreams: dreams.count ?? 0, predictions: predictions.count ?? 0, posts: posts.count ?? 0 });
+    setLoading(false);
   }, [userId]);
 
   useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
@@ -66,15 +73,19 @@ export function AccountPage({ userId }: { userId: string }) {
     const path = `${userId}/avatar.${extension}`;
     const supabase = createClient();
     const upload = await supabase.storage.from("avatars").upload(path, file, { upsert: true, contentType: file.type });
-    if (!upload.error) await supabase.from("profiles").update({ avatar_path: path }).eq("id", userId);
+    const profileUpdate = upload.error ? null : await supabase.from("profiles").update({ avatar_path: path }).eq("id", userId);
     setBusy(false);
     if (upload.error) return setMessage(upload.error.message);
+    if (profileUpdate?.error) return setMessage(profileUpdate.error.message);
     await load();
   };
 
+  if (loading) return <div className="space-y-3"><div className="h-60 animate-pulse rounded-2xl bg-muted" /><div className="h-20 animate-pulse rounded-2xl bg-muted" /></div>;
+  if (loadError) return <Card><CardContent className="flex flex-col items-center py-14 text-center"><strong className="text-sm">โหลดโปรไฟล์ไม่สำเร็จ</strong><p className="mt-1 text-xs text-muted-foreground">กรุณาตรวจการเชื่อมต่อแล้วลองอีกครั้ง</p><Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => { setLoading(true); void load(); }}><RefreshCw /> ลองใหม่</Button></CardContent></Card>;
+
   return (
     <div className="space-y-5">
-      <Card className="overflow-hidden border-primary/15"><div className="h-24 bg-[radial-gradient(circle_at_25%_0%,rgba(216,181,104,.22),transparent_55%),linear-gradient(135deg,#171923,#0f1118)]" /><CardContent className="relative px-5 pb-5"><button type="button" onClick={() => fileInput.current?.click()} className="group relative -mt-12 block rounded-full" aria-label="เปลี่ยนรูปโปรไฟล์"><Avatar className="size-24 border-4 border-card"><AvatarImage src={avatarUrl} /><AvatarFallback className="text-2xl">{profile?.display_name?.slice(0, 1) ?? "T"}</AvatarFallback></Avatar><span className="absolute bottom-1 right-1 flex size-8 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground"><Camera className="size-4" /></span></button><input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => void uploadAvatar(event.target.files?.[0])} /><div className="mt-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-xl font-bold">{profile?.display_name ?? "กำลังโหลด..."}</h2><Badge variant={profile?.account_kind === "google" ? "default" : "secondary"}>{profile?.account_kind === "google" ? "Google" : "Guest"}</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">{profile?.username ? `@${profile.username}` : `สมาชิก ${userId.slice(0, 8)}`}</p></div><Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}><Edit3 /> แก้ไข</Button></div>{profile?.bio ? <p className="mt-4 text-sm leading-6 text-muted-foreground">{profile.bio}</p> : null}</CardContent></Card>
+      <Card className="overflow-hidden border-primary/15"><div className="h-24 bg-[radial-gradient(circle_at_25%_0%,color-mix(in_srgb,var(--primary)_22%,transparent),transparent_55%),linear-gradient(135deg,var(--accent),var(--card))]" /><CardContent className="relative px-5 pb-5"><button type="button" onClick={() => fileInput.current?.click()} className="group relative -mt-12 block rounded-full" aria-label="เปลี่ยนรูปโปรไฟล์"><Avatar className="size-24 border-4 border-card"><AvatarImage src={avatarUrl} /><AvatarFallback className="text-2xl">{profile?.display_name?.slice(0, 1) ?? "T"}</AvatarFallback></Avatar><span className="absolute bottom-1 right-1 flex size-8 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground"><Camera className="size-4" /></span></button><input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(event) => void uploadAvatar(event.target.files?.[0])} /><div className="mt-3 flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-xl font-bold">{profile?.display_name ?? "กำลังโหลด..."}</h2><Badge variant={profile?.account_kind === "google" ? "default" : "secondary"}>{profile?.account_kind === "google" ? "Google" : "Guest"}</Badge></div><p className="mt-0.5 text-xs text-muted-foreground">{profile?.username ? `@${profile.username}` : `สมาชิก ${userId.slice(0, 8)}`}</p></div><Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}><Edit3 /> แก้ไข</Button></div>{profile?.bio ? <p className="mt-4 text-sm leading-6 text-muted-foreground">{profile.bio}</p> : null}</CardContent></Card>
 
       <div className="grid grid-cols-3 gap-2"><Stat value={counts.dreams} label="ความฝัน" /><Stat value={counts.predictions} label="ชุดเลข" /><Stat value={counts.posts} label="โพสต์" /></div>
 
