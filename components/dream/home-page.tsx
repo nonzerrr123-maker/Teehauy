@@ -7,7 +7,6 @@ import { ArrowRight, BarChart3, BookHeart, MessageCircle, Sparkles, TicketCheck 
 import { AnimatedWordmark } from "@/components/brand/animated-wordmark";
 import { StatsPreview } from "@/components/lottery/stats-preview";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,13 +18,12 @@ export function HomePage({ onInterpret, isLoading, error }: { onInterpret: (text
 
   return (
     <main className="page-enter mx-auto w-full max-w-2xl px-4 pb-5 pt-[max(env(safe-area-inset-top),1.5rem)] sm:px-6">
-      <header className="mb-6 flex items-center justify-between">
+      <header className="mb-6">
         <div><p className="mb-1 text-[11px] font-semibold uppercase tracking-[.22em] text-primary">Dream to number</p><AnimatedWordmark compact /></div>
-        <Badge variant="outline" className="border-success/25 bg-success/8 text-success">ระบบพร้อมใช้งาน</Badge>
       </header>
 
       <section className="mb-7">
-        <div className="mb-3"><h2 className="text-xl font-bold">เมื่อคืนฝันว่าอะไร?</h2><p className="mt-1 text-sm text-muted-foreground">เล่ารายละเอียด แล้วเก็บเลขไว้ตรวจตามงวดได้ทันที</p></div>
+        <div className="mb-3"><h2 className="text-xl font-bold">เมื่อคืนฝันว่าอะไร?</h2><p className="mt-1 text-sm text-muted-foreground">เล่าคน สัตว์ สิ่งของ เหตุการณ์ สี และจำนวนที่จำได้ ระบบจะตีความร่วมกัน</p></div>
         <Card className="overflow-hidden border-primary/20 shadow-[0_22px_70px_rgba(0,0,0,.22)]">
           <CardContent className="p-4">
             <Textarea value={dreamText} maxLength={300} rows={5} onChange={(event) => setDreamText(event.target.value)} placeholder="เช่น ฝันเห็นงูใหญ่สีทองเลื้อยเข้าบ้าน..." className="min-h-32 resize-none border-0 bg-transparent px-0 pt-0 text-base shadow-none focus-visible:ring-0" />
