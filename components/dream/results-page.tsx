@@ -5,7 +5,9 @@ import { ArrowLeft, Check, LoaderCircle, RefreshCw, Save, Share2, Star } from "l
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
 import type { DreamResult } from "@/lib/dream-engine";
 
@@ -28,6 +30,7 @@ export function ResultsPage({
   const [drawError, setDrawError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [sharePublicly, setSharePublicly] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const elementStyle: Record<string, string> = {
     ทอง: "border-[#c9a84c66] bg-[#c9a84c18] text-[#f0c040]",
@@ -59,11 +62,16 @@ export function ResultsPage({
     if (!drawId) return setSaveMessage("ยังไม่มีงวดถัดไปในระบบ");
     setSaving(true);
     setSaveMessage(null);
-    const { error } = await createClient().rpc("save_dream_prediction", { p_interpretation_id: result.id, p_draw_id: drawId, p_numbers: result.numbers });
+    const { error } = await createClient().rpc("save_dream_prediction", {
+      p_interpretation_id: result.id,
+      p_draw_id: drawId,
+      p_numbers: result.numbers,
+      p_is_public: sharePublicly,
+    });
     setSaving(false);
     if (error) return setSaveMessage(`บันทึกไม่สำเร็จ: ${error.message}`);
     setSaved(true);
-    setSaveMessage("เก็บเลขไว้ในสลากของฉันแล้ว ระบบจะเทียบผลให้อัตโนมัติ");
+    setSaveMessage(sharePublicly ? "บันทึกแล้ว และโพสต์ความฝันนี้ในชุมชนแบบสาธารณะ" : "เก็บเลขไว้ในสลากของฉันแบบส่วนตัวแล้ว ระบบจะเทียบผลให้อัตโนมัติ");
   };
 
   const share = async () => {
@@ -133,6 +141,10 @@ export function ResultsPage({
         <div className="mb-3 space-y-3 rounded-2xl border border-primary/20 bg-card p-4">
           <div><p className="text-sm font-semibold text-foreground">เก็บเลขไว้ตรวจงวดนี้</p><p className="mt-0.5 text-xs text-muted-foreground">เมื่อผลทางการยืนยัน ระบบจะเทียบชนิดเลขให้อัตโนมัติ</p></div>
           <NativeSelect value={drawId} onChange={(event) => setDrawId(event.target.value)} disabled={saved || drawsLoading || drawError}>{drawsLoading ? <option value="">กำลังโหลดงวด...</option> : draws.length ? draws.map((draw) => <option key={draw.id} value={draw.id}>งวด {new Date(`${draw.draw_date}T12:00:00+07:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับเลข</option>}</NativeSelect>
+          <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/50 p-3">
+            <Switch id="share-dream-publicly" checked={sharePublicly} onCheckedChange={setSharePublicly} disabled={saved} aria-describedby="share-dream-help" />
+            <div className="min-w-0 flex-1"><Label htmlFor="share-dream-publicly" className="cursor-pointer text-xs font-semibold">โพสต์ความฝันและเลขนี้แบบสาธารณะ</Label><p id="share-dream-help" className="mt-1 text-[11px] leading-5 text-muted-foreground">ปิดไว้เป็นค่าเริ่มต้น หากเปิด คนในชุมชนและผู้ติดตามจะเห็นข้อความฝัน คำตีความ และชุดเลขนี้</p></div>
+          </div>
           {drawError ? <Alert variant="destructive"><AlertDescription>โหลดงวดไม่สำเร็จ</AlertDescription><Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => void loadDraws()}><RefreshCw /> ลองใหม่</Button></Alert> : null}
           <Button type="button" variant="gold" className="w-full" disabled={saving || saved || !drawId} onClick={() => void saveForDraw()}>{saving ? <><LoaderCircle className="animate-spin" /> กำลังบันทึก...</> : saved ? <><Check /> บันทึกแล้ว</> : <><Save /> เก็บในสลากของฉัน</>}</Button>
           {saveMessage ? <p className="text-xs leading-5 text-muted-foreground">{saveMessage}</p> : null}
