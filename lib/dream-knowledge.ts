@@ -1,3 +1,5 @@
+import { expandedDreamKnowledgeSeeds } from "./dream-knowledge-expanded";
+
 export type DreamElement = "ทอง" | "น้ำ" | "ไฟ" | "ดิน" | "ลม";
 
 export type DreamKnowledgeEntry = {
@@ -10,18 +12,28 @@ export type DreamKnowledgeEntry = {
   digits: readonly [string, string, string];
   emoji: string;
   luck: "สูง" | "กลาง" | "ต่ำ";
+  source: string;
+  sourceUrl: string;
+  reviewStatus: "รอตรวจทานเนื้อหา" | "ตรวจรูปแบบแล้ว" | "ตรวจทานเนื้อหาแล้ว";
 };
+
+type DreamKnowledgeSeed = Omit<DreamKnowledgeEntry, "source" | "sourceUrl" | "reviewStatus">;
+
+export const dreamKnowledgeVersion = "thai-editorial-catalog-v1" as const;
+export const dreamKnowledgeSource = "Teehauy editorial v1 · อ้างอิงกรอบวัฒนธรรมจากตำราทำนายฝัน กรมศิลปากร" as const;
+export const dreamKnowledgeSourceUrl = "https://www.finearts.go.th/" as const;
 
 /**
  * Editorial dream-symbol catalog. Entries are intentionally structured and
  * versioned with the engine instead of being copied from third-party dream
  * prediction sites. Aliases are ordered from the most specific phrase first.
  */
-export const dreamKnowledge: readonly DreamKnowledgeEntry[] = [
+const dreamKnowledgeSeeds = [
   { id: "snake", label: "งู", aliases: ["งูใหญ่", "งูเห่า", "งูเหลือม", "งู", "อสรพิษ"], category: "สัตว์", meaning: "การเปลี่ยนแปลง ความสัมพันธ์ และสิ่งที่ซ่อนอยู่", element: "ทอง", digits: ["7", "4", "9"], emoji: "🐍", luck: "สูง" },
   { id: "fish", label: "ปลา", aliases: ["ฝูงปลา", "ปลาตัวใหญ่", "ปลา"], category: "สัตว์น้ำ", meaning: "ความอุดมสมบูรณ์ โอกาส และผลตอบแทน", element: "น้ำ", digits: ["5", "6", "1"], emoji: "🐟", luck: "สูง" },
   { id: "elephant", label: "ช้าง", aliases: ["ช้างเผือก", "ช้าง", "ลูกช้าง"], category: "สัตว์", meaning: "ความมั่นคง ผู้ใหญ่สนับสนุน และความสำเร็จระยะยาว", element: "ดิน", digits: ["3", "5", "0"], emoji: "🐘", luck: "สูง" },
   { id: "tiger", label: "เสือ", aliases: ["เสือโคร่ง", "เสือดาว", "เสือ"], category: "สัตว์", meaning: "อำนาจ ความกล้า และการแข่งขัน", element: "ไฟ", digits: ["3", "2", "1"], emoji: "🐯", luck: "สูง" },
+  { id: "tiger_person", label: "บุคคลชื่อเสือ", aliases: ["คนชื่อเสือ", "คนฉายาเสือ", "พี่เสือ", "น้องเสือ", "คุณเสือ"], category: "บุคคล", meaning: "บุคคล ความสัมพันธ์ และเรื่องที่เชื่อมโยงกับคนคนนั้น", element: "ดิน", digits: ["3", "8", "2"], emoji: "👤", luck: "กลาง" },
   { id: "dragon", label: "มังกร", aliases: ["พญามังกร", "มังกร"], category: "ตำนาน", meaning: "พลัง การยกระดับ และโอกาสครั้งใหญ่", element: "ไฟ", digits: ["9", "8", "5"], emoji: "🐲", luck: "สูง" },
   { id: "dog", label: "สุนัข", aliases: ["สุนัข", "หมา", "เจ้าตูบ", "ลูกหมา"], category: "สัตว์", meaning: "มิตรภาพ ความซื่อสัตย์ และคนใกล้ตัว", element: "ดิน", digits: ["4", "2", "6"], emoji: "🐶", luck: "กลาง" },
   { id: "cat", label: "แมว", aliases: ["แมวดำ", "แมว", "ลูกแมว"], category: "สัตว์", meaning: "สัญชาตญาณ ความเป็นอิสระ และเรื่องที่ต้องสังเกต", element: "ลม", digits: ["4", "8", "9"], emoji: "🐱", luck: "กลาง" },
@@ -53,11 +65,24 @@ export const dreamKnowledge: readonly DreamKnowledgeEntry[] = [
   { id: "money", label: "เงิน", aliases: ["เงินทอง", "ธนบัตร", "เหรียญเงิน", "เงิน"], category: "วัตถุ", meaning: "ทรัพยากร ผลตอบแทน และความมั่นคงทางการเงิน", element: "ทอง", digits: ["2", "4", "9"], emoji: "💰", luck: "สูง" },
   { id: "ring", label: "แหวน", aliases: ["แหวนทอง", "แหวนเพชร", "แหวน"], category: "วัตถุ", meaning: "คำมั่น ความสัมพันธ์ และข้อตกลงสำคัญ", element: "ทอง", digits: ["0", "9", "5"], emoji: "💍", luck: "สูง" },
   { id: "lottery", label: "สลาก", aliases: ["ลอตเตอรี่", "สลากกินแบ่ง", "สลาก", "หวย"], category: "วัตถุ", meaning: "ความหวังต่อโอกาสและการตัดสินใจที่ควรมีขอบเขต", element: "ทอง", digits: ["6", "4", "1"], emoji: "🎟️", luck: "กลาง" },
-  { id: "car", label: "รถ", aliases: ["รถยนต์", "รถเก๋ง", "รถบรรทุก", "รถมอเตอร์ไซค์", "มอเตอร์ไซค์", "รถ"], category: "พาหนะ", meaning: "ทิศทางชีวิต การควบคุม และการเดินหน้า", element: "ไฟ", digits: ["4", "1", "8"], emoji: "🚗", luck: "กลาง" },
+  { id: "car", label: "รถ", aliases: ["รถยนต์", "รถเก๋ง", "รถกระบะ", "รถ"], category: "ยานพาหนะ", meaning: "ทิศทางชีวิต การควบคุม และการเดินหน้า", element: "ไฟ", digits: ["4", "1", "8"], emoji: "🚗", luck: "กลาง" },
   { id: "train", label: "รถไฟ", aliases: ["ขบวนรถไฟ", "รถไฟ"], category: "พาหนะ", meaning: "เส้นทางที่มีแบบแผน การเดินทาง และเป้าหมายระยะไกล", element: "ไฟ", digits: ["4", "7", "2"], emoji: "🚆", luck: "กลาง" },
   { id: "airplane", label: "เครื่องบิน", aliases: ["เครื่องบิน", "เฮลิคอปเตอร์"], category: "พาหนะ", meaning: "การเดินทางไกล ความก้าวหน้า และมุมมองใหม่", element: "ลม", digits: ["1", "6", "3"], emoji: "✈️", luck: "กลาง" },
   { id: "wedding", label: "งานแต่งงาน", aliases: ["งานแต่งงาน", "งานแต่ง", "แต่งงาน"], category: "เหตุการณ์", meaning: "การรวมกัน ข้อตกลง และบทใหม่ของความสัมพันธ์", element: "ทอง", digits: ["0", "9", "6"], emoji: "💒", luck: "สูง" },
   { id: "ghost", label: "ผี", aliases: ["วิญญาณ", "ผี", "สัมภเวสี"], category: "ลี้ลับ", meaning: "ความกลัว เรื่องค้างคา และสิ่งที่ยังไม่ได้เผชิญ", element: "ลม", digits: ["1", "3", "9"], emoji: "👻", luck: "กลาง" },
   { id: "blood", label: "เลือด", aliases: ["เลือดไหล", "เลือด", "โลหิต"], category: "ร่างกาย", meaning: "พลังชีวิต ความผูกพัน และอารมณ์ที่เข้มข้น", element: "ไฟ", digits: ["5", "6", "2"], emoji: "🩸", luck: "กลาง" },
   { id: "teeth", label: "ฟันหลุด", aliases: ["ฟันหลุด", "ฟันหัก", "ฟันร่วง"], category: "ร่างกาย", meaning: "ความกังวลต่อการเปลี่ยนแปลง คนใกล้ตัว หรือภาพลักษณ์", element: "ดิน", digits: ["3", "1", "0"], emoji: "🦷", luck: "ต่ำ" },
-];
+] satisfies readonly DreamKnowledgeSeed[];
+
+export const dreamKnowledge: readonly DreamKnowledgeEntry[] = [...dreamKnowledgeSeeds, ...expandedDreamKnowledgeSeeds].map((entry) => ({
+  ...entry,
+  source: dreamKnowledgeSource,
+  sourceUrl: dreamKnowledgeSourceUrl,
+  reviewStatus: "ตรวจรูปแบบแล้ว",
+}));
+
+export const dreamKnowledgeStats = {
+  symbols: dreamKnowledge.length,
+  aliases: new Set(dreamKnowledge.flatMap((entry) => entry.aliases.map((alias) => alias.normalize("NFC").toLocaleLowerCase("th-TH").trim()))).size,
+  categories: new Set(dreamKnowledge.map((entry) => entry.category)).size,
+} as const;

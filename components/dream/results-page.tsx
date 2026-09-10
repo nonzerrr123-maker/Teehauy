@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, CircleAlert, LoaderCircle, RefreshCw, Save, Share2, Sparkles, Star } from "lucide-react";
+import { ArrowLeft, Check, CircleAlert, LoaderCircle, PawPrint, RefreshCw, Save, Share2, Sparkles, Star, UserRound } from "lucide-react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -9,18 +9,22 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { createClient } from "@/lib/supabase/client";
-import type { DreamResult } from "@/lib/dream-engine";
+import type { DreamClarificationResolution, DreamResult } from "@/lib/dream-engine";
 
 type Draw = { id: string; draw_date: string };
 
 export function ResultsPage({
   result,
   favorite,
+  isInterpreting,
+  onClarify,
   onFavorite,
   onBack,
 }: {
   result: DreamResult;
   favorite: boolean;
+  isInterpreting: boolean;
+  onClarify: (resolution: DreamClarificationResolution) => void;
   onFavorite: () => void;
   onBack: () => void;
 }) {
@@ -35,7 +39,18 @@ export function ResultsPage({
   const twoDigitNumbers = result.numbers.filter((item) => item.value.length === 2).slice(0, 6);
   const threeDigitNumbers = result.numbers.filter((item) => item.value.length === 3).slice(0, 6);
   const symbols = result.analysis?.symbols ?? [];
+  const clarification = result.analysis?.clarification;
   const hasNumbers = twoDigitNumbers.length > 0 || threeDigitNumbers.length > 0;
+  const numberProvenance = result.numbers.find((item) => item.knowledgeSource);
+  const provenance = symbols[0] ? {
+    source: symbols[0].source,
+    sourceUrl: symbols[0].sourceUrl,
+    reviewStatus: symbols[0].reviewStatus,
+  } : numberProvenance?.knowledgeSource && numberProvenance.knowledgeSourceUrl ? {
+    source: numberProvenance.knowledgeSource,
+    sourceUrl: numberProvenance.knowledgeSourceUrl,
+    reviewStatus: numberProvenance.reviewStatus,
+  } : null;
   const elementStyle: Record<string, string> = {
     ทอง: "border-[#c9a84c66] bg-[#c9a84c18] text-[#f0c040]",
     น้ำ: "border-[#58a6ff66] bg-[#58a6ff18] text-[#80c0ff]",
@@ -59,7 +74,11 @@ export function ResultsPage({
     setDrawsLoading(false);
   }, []);
 
-  useEffect(() => { const timer = window.setTimeout(() => { void loadDraws(); }, 0); return () => window.clearTimeout(timer); }, [loadDraws]);
+  useEffect(() => {
+    if (!hasNumbers) return;
+    const timer = window.setTimeout(() => { void loadDraws(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [hasNumbers, loadDraws]);
 
   const saveForDraw = async () => {
     if (!result.id) return setSaveMessage("ผลนี้มาจากโหมดออฟไลน์ จึงยังเก็บเข้ารอบงวดไม่ได้");
@@ -96,14 +115,14 @@ export function ResultsPage({
       <div className="flex shrink-0 items-center justify-between px-5 pb-4 pt-10">
         <Button type="button" onClick={onBack} variant="outline" size="sm"><ArrowLeft /> กลับ</Button>
         <h1 className="gold-text font-display text-sm font-semibold">ผลการตีเลข</h1>
-        <Button
+        {!clarification ? <Button
           type="button"
           onClick={onFavorite}
           aria-label="บันทึกรายการโปรด"
           variant="outline"
           size="icon"
           className="text-primary"
-        ><Star fill={favorite ? "currentColor" : "none"} /></Button>
+        ><Star fill={favorite ? "currentColor" : "none"} /></Button> : <span className="size-9" aria-hidden="true" />}
       </div>
 
       <div className="scroll-area flex-1 px-5 pb-5">
@@ -112,34 +131,51 @@ export function ResultsPage({
           <p className="text-sm leading-relaxed text-foreground">“{result.dreamText}”</p>
         </div>
 
+        {clarification ? <div className="mb-5 rounded-2xl border border-primary/30 bg-card p-4 shadow-sm">
+          <p className="text-sm font-semibold text-foreground">{clarification.question}</p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">ระบบยังไม่สร้างเลขหรือบันทึกความฝันจนกว่าคุณจะเลือกความหมาย</p>
+          <div className="mt-4 grid gap-3">
+            {clarification.options.map((option) => {
+              const Icon = option.id === "animal" ? PawPrint : UserRound;
+              return <Button key={option.id} type="button" variant="outline" className="h-auto justify-start whitespace-normal px-4 py-3 text-left" disabled={isInterpreting} onClick={() => onClarify({ termId: clarification.termId, optionId: option.id })}>
+                {isInterpreting ? <LoaderCircle className="size-4 shrink-0 animate-spin" /> : <Icon className="size-4 shrink-0 text-primary" />}
+                <span><span className="block text-sm font-semibold text-foreground">{option.label}</span><span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted-foreground">{option.description}</span></span>
+              </Button>;
+            })}
+          </div>
+        </div> : null}
+
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-[11px] font-semibold uppercase tracking-[.18em] text-muted-foreground">ผลจากคลังสัญลักษณ์</h2>
-          <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${elementStyle[result.luckyElement] ?? elementStyle.ทอง}`}>
+          {!clarification ? <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${elementStyle[result.luckyElement] ?? elementStyle.ทอง}`}>
             ธาตุ{result.luckyElement}
-          </span>
+          </span> : null}
         </div>
 
         {hasNumbers ? <>
           <NumberGrid title="เลข 2 ตัว · 6 อันดับ" items={twoDigitNumbers} accent />
           <NumberGrid title="เลข 3 ตัว · 6 อันดับ" items={threeDigitNumbers} />
-        </> : <Alert variant="warning" className="mb-4"><CircleAlert className="size-4" /><AlertDescription>{result.meaning}</AlertDescription><Button type="button" variant="outline" size="sm" className="mt-3" onClick={onBack}>กลับไปเพิ่มรายละเอียด</Button></Alert>}
+        </> : !clarification ? <Alert variant="warning" className="mb-4"><CircleAlert className="size-4" /><AlertDescription>{result.meaning}</AlertDescription><Button type="button" variant="outline" size="sm" className="mt-3" onClick={onBack}>กลับไปเพิ่มรายละเอียด</Button></Alert> : null}
 
-        {symbols.length ? <div className="glass-card mb-4 rounded-2xl p-4">
+        {symbols.length && !clarification ? <div className="glass-card mb-4 rounded-2xl p-4">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold text-primary"><Sparkles className="size-3.5" /> สัญลักษณ์ที่พบ</p>
           <div className="space-y-3">
             {symbols.slice(0, 5).map((symbol) => <div key={symbol.id} className="flex items-start gap-3">
               <span className={symbol.importance === "หลัก" ? "rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground" : "rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold text-muted-foreground"}>{symbol.importance}</span>
-              <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{symbol.label} <span className="font-normal text-muted-foreground">· {symbol.category}</span></p><p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{symbol.meaning}{symbol.contexts.length ? ` · บริบท: ${symbol.contexts.join(", ")}` : ""}</p></div>
+              <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{symbol.label} <span className="font-normal text-muted-foreground">· {symbol.category}</span></p><p className="mt-0.5 text-[11px] leading-5 text-muted-foreground">{symbol.meaning}{symbol.contexts.length ? ` · บริบท: ${symbol.contexts.join(", ")}` : ""}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">ที่มา: <a href={symbol.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">{symbol.source}</a> · {symbol.reviewStatus}</p></div>
             </div>)}
           </div>
         </div> : null}
 
-        {result.analysis?.assumption ? <Alert variant="warning" className="mb-4"><CircleAlert className="size-4" /><AlertDescription>{result.analysis.assumption}</AlertDescription></Alert> : null}
         {result.analysis?.hasUnmatchedContent && !result.analysis.needsMoreDetail ? <p className="mb-4 rounded-xl border border-border bg-muted/50 px-3 py-2 text-[11px] leading-5 text-muted-foreground">บางรายละเอียดอยู่นอกคลัง ระบบจึงใช้เฉพาะสัญลักษณ์และบริบทที่ระบุด้านบนในการจัดอันดับเลข</p> : null}
 
         {hasNumbers ? <div className="glass-card mb-4 rounded-2xl p-4">
           <p className="mb-2 text-xs font-semibold text-primary">✦ คำตีความ</p>
           <p className="text-sm leading-6 text-muted-foreground">{result.meaning}</p>
+        </div> : null}
+
+        {hasNumbers && provenance ? <div className="mb-4 rounded-xl border border-border bg-muted/40 px-3 py-2 text-[10px] leading-4 text-muted-foreground">
+          แหล่งข้อมูล: <a href={provenance.sourceUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">{provenance.source}</a>{provenance.reviewStatus ? ` · ${provenance.reviewStatus}` : ""}
         </div> : null}
 
         {hasNumbers ? <div className="mb-3 space-y-3 rounded-2xl border border-primary/20 bg-card p-4">
@@ -154,7 +190,7 @@ export function ResultsPage({
           {saveMessage ? <p className="text-xs leading-5 text-muted-foreground">{saveMessage}</p> : null}
         </div> : null}
 
-        <Button type="button" onClick={() => void share()} variant="outline" className="w-full"><Share2 /> แชร์ผลการตีเลข</Button>
+        {hasNumbers ? <Button type="button" onClick={() => void share()} variant="outline" className="w-full"><Share2 /> แชร์ผลการตีเลข</Button> : null}
         <p className="mt-4 text-center text-[10px] leading-4 text-muted-foreground">
           ผลการตีเลขเป็นคอนเทนต์เพื่อความบันเทิง ไม่ใช่การรับประกันผลรางวัล
         </p>
