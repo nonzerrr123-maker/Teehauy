@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { analyzeTwoDigitNumbers } from "@/lib/lottery-analysis";
+import { analyzeThreeDigitNumbers, analyzeTwoDigitNumbers } from "@/lib/lottery-analysis";
 import { getLotteryStats } from "@/lib/lottery-provider";
 export const dynamic = "force-dynamic";
 export async function GET() {
-  try { const stats = await getLotteryStats(); const results = analyzeTwoDigitNumbers(stats.draws.map((draw) => ({ date: draw.drawDate, top: draw.top, bottom: draw.bottom })), 12); return NextResponse.json({ ok: true, status: stats.draws.length >= 6 ? "ready" : "insufficient_data", sampleSize: stats.draws.length, model: "frequency_recency_gap_ensemble@1.0.0", results, disclaimer: "การวิเคราะห์ใช้รูปแบบทางคณิตศาสตร์จากข้อมูลย้อนหลัง ไม่สามารถรับประกันผลรางวัลได้" }); }
+  try { const stats = await getLotteryStats(); const history = stats.draws.map((draw) => ({ date: draw.drawDate, top: draw.top, bottom: draw.bottom, threeDigit: draw.threeDigit })); return NextResponse.json({ ok: true, status: stats.draws.length >= 6 ? "ready" : "insufficient_data", sampleSize: stats.draws.length, model: "weighted_frequency_position_recency@2.0.0", method: { markovChain: false, exactFrequency: .5, positionFrequency: .3, recency: .2 }, twoDigitResults: analyzeTwoDigitNumbers(history, 6), threeDigitResults: analyzeThreeDigitNumbers(history, 6), disclaimer: "การจัดอันดับมาจากรูปแบบในผลย้อนหลังเพื่อความบันเทิง ไม่ใช่ความน่าจะเป็นของการถูกรางวัล และไม่สามารถรับประกันผลได้" }); }
   catch { return NextResponse.json({ ok: false, message: "ยังวิเคราะห์ข้อมูลไม่ได้" }, { status: 503 }); }
 }
