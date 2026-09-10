@@ -2,29 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { AccountProfilePage } from "@/components/dream/account-profile-page";
-import { BottomNav, StarsBackground, type DreamTab } from "@/components/dream/common";
-import { DictionaryPage } from "@/components/dream/dictionary-page";
-import { HistoryPage } from "@/components/dream/history-page";
+import { MobileAppShell } from "@/components/app/mobile-app-shell";
 import { HomePage } from "@/components/dream/home-page";
 import { ResultsPage } from "@/components/dream/results-page";
-import { StatsPage } from "@/components/dream/stats-page";
 import { interpretDream, type DreamResult } from "@/lib/dream-engine";
 
-type InterpretApiResponse =
-  | { ok: true; result: DreamResult; persisted?: boolean }
-  | { ok: false; error: string; message: string };
+type InterpretApiResponse = { ok: true; result: DreamResult; persisted?: boolean } | { ok: false; error: string; message: string };
+type HistoryApiResponse = { ok: true; history: DreamResult[]; favorites: DreamResult[] } | { ok: false; error: string; message: string };
 
-type HistoryApiResponse =
-  | { ok: true; history: DreamResult[]; favorites: DreamResult[] }
-  | { ok: false; error: string; message: string };
-
-function sameResult(a: DreamResult, b: DreamResult): boolean {
+function sameResult(a: DreamResult, b: DreamResult) {
   if (a.id && b.id) return a.id === b.id;
   return a.dreamText === b.dreamText && a.date === b.date;
 }
 
-function mergeResults(primary: DreamResult[], secondary: DreamResult[], limit = 100): DreamResult[] {
+function mergeResults(primary: DreamResult[], secondary: DreamResult[], limit = 100) {
   const merged: DreamResult[] = [];
   for (const item of [...primary, ...secondary]) {
     if (!merged.some((existing) => sameResult(existing, item))) merged.push(item);
@@ -34,177 +25,56 @@ function mergeResults(primary: DreamResult[], secondary: DreamResult[], limit = 
 }
 
 export default function DreamApp({ userId }: { userId: string }) {
-  const [activeTab, setActiveTab] = useState<DreamTab>("home");
-  const [showResults, setShowResults] = useState(false);
   const [currentResult, setCurrentResult] = useState<DreamResult | null>(null);
-  const [savedResults, setSavedResults] = useState<DreamResult[]>([]);
   const [favorites, setFavorites] = useState<DreamResult[]>([]);
-  const [hydrated, setHydrated] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretError, setInterpretError] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      let localHistory: DreamResult[] = [];
-      let localFavorites: DreamResult[] = [];
-
-      try {
-        const history = localStorage.getItem("teehauy:history");
-        const favs = localStorage.getItem("teehauy:favorites");
-        if (history) localHistory = JSON.parse(history) as DreamResult[];
-        if (favs) localFavorites = JSON.parse(favs) as DreamResult[];
-      } catch {
-        // Ignore malformed legacy data.
-      }
-
-      setSavedResults(localHistory);
-      setFavorites(localFavorites);
-      setHydrated(true);
-
-      void fetch("/api/dream/history", {
-        method: "GET",
-        cache: "no-store",
+    let active = true;
+    void fetch("/api/dream/history", { cache: "no-store" })
+      .then(async (response) => ({ response, payload: (await response.json()) as HistoryApiResponse }))
+      .then(({ response, payload }) => {
+        if (active && response.ok && payload.ok) setFavorites(payload.favorites);
       })
-        .then(async (response) => ({ response, payload: (await response.json()) as HistoryApiResponse }))
-        .then(({ response, payload }) => {
-          if (!response.ok || !payload.ok) return;
-          setSavedResults((current) => mergeResults(payload.history, current, 30));
-          setFavorites((current) => mergeResults(payload.favorites, current, 100));
-        })
-        .catch(() => {
-          // Local persistence remains available when the database is offline.
-        });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
+      .catch(() => undefined);
+    return () => { active = false; };
   }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("teehauy:history", JSON.stringify(savedResults));
-  }, [hydrated, savedResults]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem("teehauy:favorites", JSON.stringify(favorites));
-  }, [favorites, hydrated]);
 
   const handleInterpret = useCallback(async (dreamText: string) => {
     const normalized = dreamText.trim();
     if (normalized.length < 2 || normalized.length > 300) return;
-
     setIsInterpreting(true);
     setInterpretError(null);
-
     let result: DreamResult;
-
     try {
-      const response = await fetch("/api/dream/interpret", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ dreamText: normalized }),
-        cache: "no-store",
-      });
-
+      const response = await fetch("/api/dream/interpret", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dreamText: normalized }), cache: "no-store" });
       const payload = (await response.json()) as InterpretApiResponse;
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.ok ? "ตีความความฝันไม่สำเร็จ" : payload.message);
-      }
-
+      if (!response.ok || !payload.ok) throw new Error(payload.ok ? "ตีความความฝันไม่สำเร็จ" : payload.message);
       result = payload.result;
     } catch {
       result = interpretDream(normalized);
-      setInterpretError("เชื่อมต่อระบบตีความไม่ได้ชั่วคราว จึงใช้โหมดสำรองบนอุปกรณ์นี้");
+      setInterpretError("ระบบออนไลน์ขัดข้องชั่วคราว ผลนี้สร้างจากโหมดสำรองและยังไม่ซิงก์");
     } finally {
       setIsInterpreting(false);
     }
-
     setCurrentResult(result);
-    setShowResults(true);
-    setActiveTab("home");
-    setSavedResults((prev) => mergeResults([result], prev, 30));
   }, []);
 
   const toggleFavorite = useCallback(async (result: DreamResult) => {
     const exists = favorites.some((item) => sameResult(item, result));
-    const shouldFavorite = !exists;
-
-    setFavorites((prev) =>
-      exists
-        ? prev.filter((item) => !sameResult(item, result))
-        : mergeResults([result], prev, 100),
-    );
-
+    setFavorites((current) => exists ? current.filter((item) => !sameResult(item, result)) : mergeResults([result], current));
     if (!result.id) return;
-
-    try {
-      await fetch("/api/dream/favorite", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ interpretationId: result.id, favorite: shouldFavorite }),
-        cache: "no-store",
-      });
-    } catch {
-      // Optimistic local favorite state remains usable offline.
-    }
+    await fetch("/api/dream/favorite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ interpretationId: result.id, favorite: !exists }), cache: "no-store" }).catch(() => undefined);
   }, [favorites]);
 
-  const isFavorite = useCallback(
-    (result: DreamResult) => favorites.some((item) => sameResult(item, result)),
-    [favorites],
-  );
-
-  const changeTab = (tab: DreamTab) => {
-    setActiveTab(tab);
-    if (tab !== "home") setShowResults(false);
-    if (tab === "home") setInterpretError(null);
-  };
-
   return (
-    <div className="app-shell">
-      <StarsBackground />
-
-      <div className="relative z-10 min-h-0 flex-1 overflow-hidden">
-        {activeTab === "home" && !showResults ? (
-          <HomePage onInterpret={handleInterpret} isLoading={isInterpreting} error={interpretError} />
-        ) : null}
-
-        {activeTab === "home" && showResults && currentResult ? (
-          <ResultsPage
-            result={currentResult}
-            favorite={isFavorite(currentResult)}
-            onFavorite={() => void toggleFavorite(currentResult)}
-            onBack={() => {
-              setShowResults(false);
-              setInterpretError(null);
-            }}
-          />
-        ) : null}
-
-        {activeTab === "dictionary" ? (
-          <DictionaryPage onInterpret={handleInterpret} isLoading={isInterpreting} />
-        ) : null}
-
-        {activeTab === "history" ? (
-          <HistoryPage
-            results={savedResults}
-            favorites={favorites}
-            isFavorite={isFavorite}
-            onFavorite={(result) => void toggleFavorite(result)}
-            onInterpret={handleInterpret}
-            isLoading={isInterpreting}
-          />
-        ) : null}
-
-        {activeTab === "stats" ? <StatsPage /> : null}
-        {activeTab === "profile" ? <AccountProfilePage userId={userId} historyCount={savedResults.length} favoriteCount={favorites.length} /> : null}
-      </div>
-
-      <BottomNav activeTab={activeTab} onChange={changeTab} />
-    </div>
+    <MobileAppShell userId={userId}>
+      {currentResult ? (
+        <ResultsPage result={currentResult} favorite={favorites.some((item) => sameResult(item, currentResult))} onFavorite={() => void toggleFavorite(currentResult)} onBack={() => { setCurrentResult(null); setInterpretError(null); }} />
+      ) : (
+        <HomePage onInterpret={handleInterpret} isLoading={isInterpreting} error={interpretError} />
+      )}
+    </MobileAppShell>
   );
 }

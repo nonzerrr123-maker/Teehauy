@@ -1,12 +1,48 @@
 "use client";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+
+import { useEffect, useState, type FormEvent } from "react";
+import { Check, Hash, LoaderCircle, LockKeyhole } from "lucide-react";
+
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
-type Draw = { id: string; draw_date: string; status: string };
-type Prediction = { id: string; title: string | null; status: string; prediction_numbers: { number_value: string; number_kind: string }[] };
+
+type Draw = { id: string; draw_date: string };
+
 export function PredictionsPage() {
-  const [draws, setDraws] = useState<Draw[]>([]); const [items, setItems] = useState<Prediction[]>([]); const [drawId, setDrawId] = useState(""); const [numbers, setNumbers] = useState(""); const [title, setTitle] = useState(""); const [isPublic, setPublic] = useState(false); const [message, setMessage] = useState<string | null>(null);
-  const load = useCallback(async () => { const s = createClient(); const [a, b] = await Promise.all([s.from("lottery_draws").select("id, draw_date, status").in("status", ["scheduled","published","verified"]).order("draw_date", { ascending: false }), s.from("user_predictions").select("id, title, status, prediction_numbers(number_value, number_kind)").order("created_at", { ascending: false }).limit(30)]); const d = (a.data ?? []) as Draw[]; setDraws(d); setDrawId((v) => v || d[0]?.id || ""); setItems((b.data ?? []) as unknown as Prediction[]); }, []);
-  useEffect(() => { const timer = window.setTimeout(() => { void load(); }, 0); return () => window.clearTimeout(timer); }, [load]);
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const values = [...new Set(numbers.split(/[\s,]+/).filter(Boolean))]; if (!drawId || values.some((v) => !/^\d{2}$|^\d{3}$|^\d{6}$/.test(v))) return setMessage("ใส่เลข 2, 3 หรือ 6 หลัก"); const payload = values.map((value) => ({ value, kind: value.length === 2 ? "dream_two" : value.length === 3 ? "dream_three" : "six_digit_ticket" })); const result = await createClient().rpc("submit_prediction", { p_draw_id: drawId, p_source_type: "manual", p_title: title, p_note: "", p_is_public: isPublic, p_numbers: payload }); if (result.error) setMessage("บันทึกไม่สำเร็จ: " + result.error.message); else { setNumbers(""); setTitle(""); setMessage("บันทึกและล็อกเลขแล้ว"); await load(); } };
-  return <div className="space-y-5"><form onSubmit={submit} className="gold-card space-y-3 rounded-2xl p-4"><select value={drawId} onChange={(e) => setDrawId(e.target.value)} className="w-full rounded-xl bg-[#13131f] p-3">{draws.map((d) => <option key={d.id} value={d.id}>งวด {d.draw_date}</option>)}</select><input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="ชื่อชุดเลข" className="w-full rounded-xl bg-[#13131f] p-3" /><textarea required value={numbers} onChange={(e) => setNumbers(e.target.value)} placeholder="17, 71, 417, 123456" className="w-full rounded-xl bg-[#13131f] p-3" /><label className="flex gap-2 text-xs"><input type="checkbox" checked={isPublic} onChange={(e) => setPublic(e.target.checked)} />แชร์ให้ชุมชนเห็น</label><button className="gold-button w-full rounded-xl py-3 font-bold">ยืนยันเลขงวดนี้</button>{message ? <p className="text-xs text-[#d6b867]">{message}</p> : null}</form>{items.map((item) => <article key={item.id} className="glass-card rounded-2xl p-4"><div className="flex justify-between"><strong>{item.title || "ชุดเลขของฉัน"}</strong><span className="text-[10px] text-[#80d0c0]">{item.status}</span></div><div className="mt-3 flex flex-wrap gap-2">{item.prediction_numbers.map((n) => <span key={n.number_kind + n.number_value} className="rounded-xl border border-[#c9a84c33] px-3 py-2 text-[#f0c040]">{n.number_value}</span>)}</div></article>)}</div>;
+  const [draws, setDraws] = useState<Draw[]>([]);
+  const [drawId, setDrawId] = useState("");
+  const [numbers, setNumbers] = useState("");
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [loadingDraws, setLoadingDraws] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const values = [...new Set(numbers.split(/[\s,]+/).filter(Boolean))];
+
+  useEffect(() => { let active = true; void createClient().from("lottery_draws").select("id,draw_date").eq("status", "scheduled").order("draw_date").then(({ data, error }) => { if (active) { setLoadingDraws(false); if (error) { setMessage("โหลดข้อมูลงวดไม่สำเร็จ"); return; } const next = (data ?? []) as Draw[]; setDraws(next); setDrawId(next[0]?.id ?? ""); } }); return () => { active = false; }; }, []);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!drawId) return setMessage("ยังไม่มีงวดที่เปิดรับเลข");
+    if (!values.length || values.length > 30 || values.some((value) => !/^\d{2}$|^\d{3}$|^\d{6}$/.test(value))) return setMessage("ใส่เลข 2, 3 หรือ 6 หลัก คั่นด้วยช่องว่างหรือจุลภาค สูงสุด 30 เลข");
+    setBusy(true); setMessage(null);
+    const payload = values.map((value) => ({ value, kind: value.length === 2 ? "dream_two" : value.length === 3 ? "dream_three" : "six_digit_ticket" }));
+    const { error } = await createClient().rpc("submit_prediction", { p_draw_id: drawId, p_source_type: "manual", p_title: title, p_note: "", p_is_public: false, p_numbers: payload });
+    setBusy(false);
+    if (error) return setMessage(`บันทึกไม่สำเร็จ: ${error.message}`);
+    setNumbers(""); setTitle(""); setMessage("บันทึกและล็อกเลขตามงวดแล้ว");
+  };
+
+  return (
+    <div className="space-y-4">
+      <Alert><LockKeyhole className="size-4" /><AlertDescription>เลขจะถูกล็อกพร้อมเวลาเมื่อยืนยัน เพื่อให้ตรวจย้อนหลังได้อย่างโปร่งใส และแก้ไขหลังส่งไม่ได้</AlertDescription></Alert>
+      <Card><CardHeader className="p-4 pb-2"><CardTitle className="text-base">ชุดเลขใหม่</CardTitle></CardHeader><CardContent><form onSubmit={submit} className="space-y-4"><div className="space-y-2"><Label htmlFor="prediction-draw">งวดที่ต้องการตรวจ</Label><NativeSelect id="prediction-draw" value={drawId} disabled={loadingDraws || !draws.length} onChange={(event) => setDrawId(event.target.value)}>{loadingDraws ? <option value="">กำลังโหลดงวด...</option> : draws.length ? draws.map((draw) => <option key={draw.id} value={draw.id}>{new Date(`${draw.draw_date}T12:00:00+07:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" })}</option>) : <option value="">ยังไม่มีงวดถัดไป</option>}</NativeSelect></div><div className="space-y-2"><Label htmlFor="prediction-title">ชื่อชุดเลข</Label><Input id="prediction-title" maxLength={100} value={title} onChange={(event) => setTitle(event.target.value)} placeholder="เช่น เลขจากทะเบียนรถ" /></div><div className="space-y-2"><Label htmlFor="prediction-numbers">เลข 2, 3 หรือ 6 หลัก</Label><Textarea id="prediction-numbers" required rows={4} value={numbers} onChange={(event) => setNumbers(event.target.value.replace(/[^\d,\s]/g, ""))} placeholder="17, 71, 417, 123456" /></div>{values.length ? <div className="flex flex-wrap gap-2">{values.map((value) => <Badge key={value} variant="outline" className="border-primary/20 text-primary"><Hash className="mr-1 size-3" />{value}</Badge>)}</div> : null}<Button type="submit" variant="gold" size="lg" className="w-full" disabled={!drawId || busy}>{busy ? <LoaderCircle className="animate-spin" /> : <Check />} {busy ? "กำลังบันทึก..." : "ยืนยันเลขงวดนี้"}</Button>{message ? <p role="status" className="text-xs leading-5 text-primary">{message}</p> : null}</form></CardContent></Card>
+    </div>
+  );
 }
