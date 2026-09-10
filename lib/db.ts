@@ -7,7 +7,7 @@ const mapRow = (row: Row): DreamResult & { id: string } => { const dream = dream
 
 export async function saveDreamInterpretation(result: DreamResult) {
   const supabase = await createClient();
-  const response = await supabase.rpc("save_dream_result", { p_dream_text: result.dreamText, p_meaning: result.meaning, p_lucky_element: result.luckyElement, p_engine_version: "rule-engine-v2", p_numbers: result.numbers });
+  const response = await supabase.rpc("save_dream_result", { p_dream_text: result.dreamText, p_meaning: result.meaning, p_lucky_element: result.luckyElement, p_engine_version: result.analysis?.engineVersion ?? "rule-engine-v2", p_numbers: result.numbers });
   if (response.error || typeof response.data !== "string") throw response.error ?? new Error("Dream result was not saved");
   return { ...result, id: response.data };
 }
