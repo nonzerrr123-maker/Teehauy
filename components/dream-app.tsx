@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { MobileAppShell } from "@/components/app/mobile-app-shell";
 import { HomePage } from "@/components/dream/home-page";
 import { ResultsPage } from "@/components/dream/results-page";
-import { interpretDream, type DreamResult } from "@/lib/dream-engine";
+import { interpretDream, type DreamClarificationResolution, type DreamResult } from "@/lib/dream-engine";
 
 type InterpretApiResponse = { ok: true; result: DreamResult; persisted?: boolean } | { ok: false; error: string; message: string };
 type HistoryApiResponse = { ok: true; history: DreamResult[]; favorites: DreamResult[] } | { ok: false; error: string; message: string };
@@ -41,19 +41,19 @@ export default function DreamApp({ userId }: { userId: string }) {
     return () => { active = false; };
   }, []);
 
-  const handleInterpret = useCallback(async (dreamText: string) => {
+  const handleInterpret = useCallback(async (dreamText: string, clarification?: DreamClarificationResolution) => {
     const normalized = dreamText.trim();
     if (normalized.length < 2 || normalized.length > 300) return;
     setIsInterpreting(true);
     setInterpretError(null);
     let result: DreamResult;
     try {
-      const response = await fetch("/api/dream/interpret", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dreamText: normalized }), cache: "no-store" });
+      const response = await fetch("/api/dream/interpret", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dreamText: normalized, clarification }), cache: "no-store" });
       const payload = (await response.json()) as InterpretApiResponse;
       if (!response.ok || !payload.ok) throw new Error(payload.ok ? "ตีความความฝันไม่สำเร็จ" : payload.message);
       result = payload.result;
     } catch {
-      result = interpretDream(normalized);
+      result = interpretDream(normalized, clarification);
       setInterpretError("ระบบออนไลน์ขัดข้องชั่วคราว ผลนี้สร้างจากโหมดสำรองและยังไม่ซิงก์");
     } finally {
       setIsInterpreting(false);
@@ -71,7 +71,7 @@ export default function DreamApp({ userId }: { userId: string }) {
   return (
     <MobileAppShell userId={userId}>
       {currentResult ? (
-        <ResultsPage result={currentResult} favorite={favorites.some((item) => sameResult(item, currentResult))} onFavorite={() => void toggleFavorite(currentResult)} onBack={() => { setCurrentResult(null); setInterpretError(null); }} />
+        <ResultsPage result={currentResult} favorite={favorites.some((item) => sameResult(item, currentResult))} isInterpreting={isInterpreting} onClarify={(resolution) => void handleInterpret(currentResult.dreamText, resolution)} onFavorite={() => void toggleFavorite(currentResult)} onBack={() => { setCurrentResult(null); setInterpretError(null); }} />
       ) : (
         <HomePage onInterpret={handleInterpret} isLoading={isInterpreting} error={interpretError} />
       )}

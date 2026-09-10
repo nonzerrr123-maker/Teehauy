@@ -1,10 +1,13 @@
-import { dreamKnowledge, type DreamElement, type DreamKnowledgeEntry } from "./dream-knowledge";
+import { dreamKnowledge, dreamKnowledgeVersion, type DreamElement, type DreamKnowledgeEntry } from "./dream-knowledge";
 
 export type NumberItem = {
   label: string;
   value: string;
   type: "2top" | "2bot" | "2dream" | "3top" | "run";
   source?: string;
+  knowledgeSource?: string;
+  knowledgeSourceUrl?: string;
+  reviewStatus?: DreamKnowledgeEntry["reviewStatus"];
 };
 
 export type DreamSymbolMatch = {
@@ -16,15 +19,35 @@ export type DreamSymbolMatch = {
   contexts: string[];
   importance: "หลัก" | "รอง";
   confidence: "สูง" | "กลาง";
+  source: string;
+  sourceUrl: string;
+  reviewStatus: DreamKnowledgeEntry["reviewStatus"];
+};
+
+export type DreamClarificationResolution = {
+  termId: "tiger";
+  optionId: "animal" | "person";
+};
+
+export type DreamClarification = {
+  termId: DreamClarificationResolution["termId"];
+  term: string;
+  question: string;
+  options: readonly {
+    id: DreamClarificationResolution["optionId"];
+    label: string;
+    description: string;
+  }[];
 };
 
 export type DreamAnalysis = {
-  engineVersion: "thai-symbol-composer-v1";
+  engineVersion: "thai-symbol-composer-v2";
+  knowledgeVersion: typeof dreamKnowledgeVersion;
   symbols: DreamSymbolMatch[];
   contexts: string[];
   hasUnmatchedContent: boolean;
   needsMoreDetail: boolean;
-  assumption?: string;
+  clarification?: DreamClarification;
 };
 
 export type DreamResult = {
@@ -43,7 +66,7 @@ type ContextDefinition = {
   label: string;
   aliases: readonly string[];
   digit: string;
-  kind: "สี" | "จำนวน" | "เหตุการณ์" | "อารมณ์";
+  kind: "สี" | "จำนวน" | "ขนาด" | "เหตุการณ์" | "สถานที่" | "อารมณ์";
   boost: number;
 };
 type ContextMatch = TextSpan & ContextDefinition & { matchedText: string };
@@ -70,11 +93,18 @@ const contextDefinitions: readonly ContextDefinition[] = [
   { label: "สาม", aliases: ["สามตัว", "สามคน", "สามองค์", "สามหลัง", "สามคัน", "สามเชือก"], digit: "3", kind: "จำนวน", boost: 0.08 },
   { label: "สี่", aliases: ["สี่ตัว", "สี่คน", "สี่องค์", "สี่หลัง", "สี่คัน", "สี่เชือก"], digit: "4", kind: "จำนวน", boost: 0.08 },
   { label: "ห้า", aliases: ["ห้าตัว", "ห้าคน", "ห้าองค์", "ห้าหลัง", "ห้าคัน", "ห้าเชือก"], digit: "5", kind: "จำนวน", boost: 0.08 },
+  { label: "ขนาดใหญ่", aliases: ["ตัวใหญ่มาก", "ขนาดใหญ่", "ตัวใหญ่", "ใหญ่มาก"], digit: "8", kind: "ขนาด", boost: 0.14 },
+  { label: "ขนาดเล็ก", aliases: ["ตัวเล็กมาก", "ขนาดเล็ก", "ตัวเล็ก", "เล็กมาก"], digit: "1", kind: "ขนาด", boost: 0.12 },
   { label: "กัด", aliases: ["กัด", "ฉก"], digit: "4", kind: "เหตุการณ์", boost: 0.3 },
+  { label: "คำราม", aliases: ["แยกเขี้ยว", "คำราม"], digit: "7", kind: "เหตุการณ์", boost: 0.24 },
   { label: "ไล่ตาม", aliases: ["วิ่งไล่", "ไล่ตาม", "ไล่"], digit: "7", kind: "เหตุการณ์", boost: 0.24 },
   { label: "ตก", aliases: ["ตกจาก", "พลัดตก", "ตก"], digit: "6", kind: "เหตุการณ์", boost: 0.22 },
   { label: "บิน", aliases: ["ลอยขึ้น", "เหาะ", "บิน"], digit: "9", kind: "เหตุการณ์", boost: 0.18 },
   { label: "ตาย", aliases: ["เสียชีวิต", "ตาย"], digit: "0", kind: "เหตุการณ์", boost: 0.28 },
+  { label: "ในป่า", aliases: ["กลางป่า", "ในป่า"], digit: "5", kind: "สถานที่", boost: 0.1 },
+  { label: "ในบ้าน", aliases: ["ข้างในบ้าน", "ในบ้าน"], digit: "3", kind: "สถานที่", boost: 0.1 },
+  { label: "ในน้ำ", aliases: ["ใต้น้ำ", "กลางน้ำ", "ในน้ำ"], digit: "1", kind: "สถานที่", boost: 0.1 },
+  { label: "บนถนน", aliases: ["กลางถนน", "บนถนน"], digit: "4", kind: "สถานที่", boost: 0.1 },
   { label: "ร้องไห้", aliases: ["ร้องไห้", "น้ำตาไหล", "น้ำตา"], digit: "2", kind: "อารมณ์", boost: 0.2 },
   { label: "กลัว", aliases: ["หวาดกลัว", "ตกใจ", "กลัว"], digit: "5", kind: "อารมณ์", boost: 0.18 },
   { label: "ดีใจ", aliases: ["มีความสุข", "หัวเราะ", "ดีใจ"], digit: "8", kind: "อารมณ์", boost: 0.14 },
@@ -85,8 +115,13 @@ const threeDigitOrders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1],
 const ignoredCoverageWords = /ฝัน(?:ว่า|เห็น)?|เมื่อคืน|เห็น|พบ|อยู่|แล้ว|และ|กับ|เข้า|ใน|ที่|ของ|ฉัน|ผม|เรา|ก็|มี|มาก|ตัว|คน|แห่ง|หนึ่ง/gu;
 
 function normalizeText(text: string) {
-  return text.normalize("NFKC").toLocaleLowerCase("th-TH").replace(/\s+/gu, " ").trim();
+  return text.normalize("NFC").toLocaleLowerCase("th-TH").replace(/\s+/gu, " ").trim();
 }
+
+const normalizedKnowledgeAliases = dreamKnowledge
+  .flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias: normalizeText(alias), canonical: normalizeText(alias) === normalizeText(entry.label) })))
+  .sort((a, b) => b.alias.length - a.alias.length || Number(b.canonical) - Number(a.canonical) || a.entry.id.localeCompare(b.entry.id));
+const dreamKnowledgeById = new Map(dreamKnowledge.map((entry) => [entry.id, entry]));
 
 function overlaps(span: TextSpan, accepted: readonly TextSpan[]) {
   return accepted.some((item) => span.start < item.end && span.end > item.start);
@@ -104,15 +139,23 @@ function findAll(text: string, value: string) {
   return indexes;
 }
 
-function collectSymbolMatches(text: string, contexts: ContextMatch[]): RawSymbolMatch[] {
-  const aliases = dreamKnowledge
-    .flatMap((entry) => entry.aliases.map((alias) => ({ entry, alias: normalizeText(alias) })))
-    .sort((a, b) => b.alias.length - a.alias.length || a.entry.id.localeCompare(b.entry.id));
-  const accepted: RawSymbolMatch[] = [];
+function thaiWordBoundaries(text: string) {
+  const boundaries = new Set<number>([0, text.length]);
+  for (const segment of new Intl.Segmenter("th", { granularity: "word" }).segment(text)) {
+    boundaries.add(segment.index);
+    boundaries.add(segment.index + segment.segment.length);
+  }
+  return boundaries;
+}
 
-  for (const item of aliases) {
+function collectSymbolMatches(text: string, contexts: ContextMatch[]): RawSymbolMatch[] {
+  const accepted: RawSymbolMatch[] = [];
+  const wordBoundaries = thaiWordBoundaries(text);
+
+  for (const item of normalizedKnowledgeAliases) {
     for (const start of findAll(text, item.alias)) {
       const span = { start, end: start + item.alias.length };
+      if (!wordBoundaries.has(span.start) || !wordBoundaries.has(span.end)) continue;
       const isColorOnly = (item.entry.id === "gold" || item.entry.id === "money") && contexts.some((context) => context.kind === "สี" && overlaps(span, [context]));
       const isWaterContext = item.entry.id === "water" && contexts.some((context) => (context.kind === "สี" || context.kind === "อารมณ์") && overlaps(span, [context]));
       const isEmbeddedShortWord = (item.entry.id === "temple" && text.slice(Math.max(0, start - 1), span.end) === "หวัด")
@@ -156,7 +199,7 @@ function rankSymbols(text: string, rawMatches: RawSymbolMatch[], contexts: Conte
       const closestMatch = [...matches].sort((a, b) => distanceBetween(a, context) - distanceBetween(b, context))[0];
       const distance = distanceBetween(closestMatch, context);
       const globalDistance = Math.min(...rawMatches.map((match) => distanceBetween(match, context)));
-      if (distance > 12 || ((context.kind === "สี" || context.kind === "จำนวน" || context.kind === "อารมณ์") && distance > globalDistance)) return [];
+      if (distance > 12 || ((context.kind === "สี" || context.kind === "จำนวน" || context.kind === "ขนาด" || context.kind === "สถานที่" || context.kind === "อารมณ์") && distance > globalDistance)) return [];
       if (context.kind !== "เหตุการณ์") return [context];
       const relationFactor = closestMatch.end <= context.start ? 1.35 : context.end <= closestMatch.start ? 0.55 : 1;
       return [{ ...context, boost: context.boost * relationFactor }];
@@ -233,17 +276,24 @@ function generateNumbers(symbols: RankedSymbol[]): NumberItem[] {
     }
   }
 
+  const provenance = symbols[0].entry;
   const twoResults = rankedCandidates(two, 6).map<NumberItem>((candidate, index) => ({
     label: `เลข 2 ตัว · ${index + 1}`,
     value: candidate.value,
     type: "2dream",
     source: [...candidate.sources].slice(0, 2).join(" · "),
+    knowledgeSource: provenance.source,
+    knowledgeSourceUrl: provenance.sourceUrl,
+    reviewStatus: provenance.reviewStatus,
   }));
   const threeResults = rankedCandidates(three, 6).map<NumberItem>((candidate, index) => ({
     label: `เลข 3 ตัว · ${index + 1}`,
     value: candidate.value,
     type: "3top",
     source: [...candidate.sources].slice(0, 2).join(" · "),
+    knowledgeSource: provenance.source,
+    knowledgeSourceUrl: provenance.sourceUrl,
+    reviewStatus: provenance.reviewStatus,
   }));
   return [...twoResults, ...threeResults];
 }
@@ -281,28 +331,61 @@ function coverageState(text: string, rawMatches: RawSymbolMatch[], contexts: Con
   return coveredIndexes.size / relevant.length < 0.45;
 }
 
-function ambiguityAssumption(symbols: RankedSymbol[]) {
-  const tiger = symbols.find((symbol) => symbol.entry.id === "tiger" && symbol.matchedTexts.includes("เสือ") && symbol.contexts.length === 0);
-  if (tiger) return "ระบบตีความคำว่า “เสือ” เป็นสัตว์ หากหมายถึงฉายาของบุคคล ให้กลับไประบุเพิ่มในข้อความ";
-  return undefined;
+function isBareTigerDream(text: string, rawMatches: RawSymbolMatch[]) {
+  if (rawMatches.length !== 1 || rawMatches[0].entry.id !== "tiger" || rawMatches[0].alias !== "เสือ") return false;
+  const withoutDreamWrapper = text
+    .replace(/เมื่อคืน/gu, "")
+    .replace(/ฝัน(?:ว่า)?/gu, "")
+    .replace(/เห็น|เจอ|พบ/gu, "")
+    .replace(/[\s,.!?"'“”‘’]+/gu, "")
+    .trim();
+  return withoutDreamWrapper === "เสือ";
 }
 
-export function interpretDream(dreamText: string): DreamResult {
+function tigerClarification(): DreamClarification {
+  return {
+    termId: "tiger",
+    term: "เสือ",
+    question: "คำว่า “เสือ” ในฝันนี้หมายถึงอะไร?",
+    options: [
+      { id: "animal", label: "เสือที่เป็นสัตว์", description: "เช่น เสือโคร่ง เสือในป่า หรือเสือที่เข้ามาทำร้าย" },
+      { id: "person", label: "คนชื่อหรือฉายาเสือ", description: "เช่น พี่เสือ เพื่อนชื่อเสือ หรือคนที่เรียกกันว่าเสือ" },
+    ],
+  };
+}
+
+function applyClarification(rawMatches: RawSymbolMatch[], resolution?: DreamClarificationResolution) {
+  if (resolution?.termId !== "tiger" || resolution.optionId !== "person") return rawMatches;
+  const person = dreamKnowledgeById.get("tiger_person");
+  if (!person) return rawMatches;
+  return rawMatches.map((match) => match.entry.id === "tiger" && match.alias === "เสือ" ? { ...match, entry: person } : match);
+}
+
+export function isDreamClarificationResolution(value: unknown): value is DreamClarificationResolution {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<DreamClarificationResolution>;
+  return candidate.termId === "tiger" && (candidate.optionId === "animal" || candidate.optionId === "person");
+}
+
+export function interpretDream(dreamText: string, resolution?: DreamClarificationResolution): DreamResult {
   const normalized = normalizeText(dreamText);
   const contexts = collectContextMatches(normalized);
-  const rawMatches = collectSymbolMatches(normalized, contexts);
+  const collectedMatches = collectSymbolMatches(normalized, contexts);
+  const clarification = !resolution && isBareTigerDream(normalized, collectedMatches) ? tigerClarification() : undefined;
+  const rawMatches = applyClarification(collectedMatches, resolution);
   const symbols = rankSymbols(normalized, rawMatches, contexts);
-  const numbers = generateNumbers(symbols);
+  const numbers = clarification ? [] : generateNumbers(symbols);
   const hasUnmatchedContent = coverageState(normalized, rawMatches, contexts);
 
   return {
     dreamText: normalized,
     numbers,
-    meaning: buildMeaning(symbols, contexts),
+    meaning: clarification ? "ข้อความนี้ยังแยกไม่ได้ว่า “เสือ” หมายถึงสัตว์หรือบุคคล เลือกความหมายที่ตรงกับฝันก่อน แล้วระบบจึงจะตีความและจัดชุดเลข" : buildMeaning(symbols, contexts),
     luckyElement: chooseElement(symbols),
     date: new Date().toISOString().slice(0, 10),
     analysis: {
-      engineVersion: "thai-symbol-composer-v1",
+      engineVersion: "thai-symbol-composer-v2",
+      knowledgeVersion: dreamKnowledgeVersion,
       symbols: symbols.map((symbol, index) => ({
         id: symbol.entry.id,
         label: symbol.entry.label,
@@ -312,11 +395,14 @@ export function interpretDream(dreamText: string): DreamResult {
         contexts: symbol.contexts.map((context) => context.label),
         importance: index === 0 ? "หลัก" : "รอง",
         confidence: symbol.confidence,
+        source: symbol.entry.source,
+        sourceUrl: symbol.entry.sourceUrl,
+        reviewStatus: symbol.entry.reviewStatus,
       })),
       contexts: [...new Set(contexts.map((context) => context.label))],
       hasUnmatchedContent,
-      needsMoreDetail: symbols.length === 0,
-      assumption: ambiguityAssumption(symbols),
+      needsMoreDetail: symbols.length === 0 || Boolean(clarification),
+      clarification,
     },
   };
 }
