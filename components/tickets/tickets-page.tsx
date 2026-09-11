@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LotteryChecker } from "@/components/tickets/lottery-checker";
 import { createClient } from "@/lib/supabase/client";
 
 type Draw = { id: string; draw_date: string; status: string };
@@ -41,7 +42,7 @@ export function TicketsPage({ userId }: { userId: string }) {
   const load = useCallback(async () => {
     const supabase = createClient();
     const [drawResponse, predictionResponse, ticketResponse] = await Promise.all([
-      supabase.from("lottery_draws").select("id,draw_date,status").in("status", ["scheduled", "published", "verified"]).order("draw_date", { ascending: false }),
+      supabase.from("lottery_draws").select("id,draw_date,status").in("status", ["scheduled", "published", "verified"]).order("draw_date", { ascending: false }).limit(100),
       supabase.from("user_predictions").select("id,title,source_type,created_at,lottery_draws(id,draw_date,status),prediction_numbers(id,number_value,number_kind,prediction_matches(id,match_kind,lottery_prizes(prize_type,prize_amount)))").eq("status", "submitted").order("created_at", { ascending: false }).limit(100),
       supabase.from("user_tickets").select("id,ticket_number,quantity,visibility,lottery_draws(id,draw_date,status),ticket_wins(id,prize_amount)").order("created_at", { ascending: false }).limit(100),
     ]);
@@ -100,8 +101,9 @@ export function TicketsPage({ userId }: { userId: string }) {
         <Summary label="เลขที่เก็บ" value={totals.predictions} /><Summary label="เลขที่ตรง" value={totals.matches} accent /><Summary label="รางวัลรวม" value={totals.ticketWins ? `฿${totals.ticketWins.toLocaleString("th-TH")}` : "—"} />
       </div>
 
-      <Tabs defaultValue="predictions">
-        <TabsList><TabsTrigger value="predictions">เลขที่ฉันตี</TabsTrigger><TabsTrigger value="tickets">สลากจริง</TabsTrigger></TabsList>
+      <Tabs defaultValue="checker">
+        <TabsList><TabsTrigger value="checker">ตรวจรางวัล</TabsTrigger><TabsTrigger value="predictions">เลขที่ฉันตี</TabsTrigger><TabsTrigger value="tickets">สลากจริง</TabsTrigger></TabsList>
+        <TabsContent value="checker"><LotteryChecker draws={draws} /></TabsContent>
         <TabsContent value="predictions" className="space-y-3">
           <Button asChild variant="outline" className="w-full border-dashed"><Link href="/predictions"><Plus /> เพิ่มชุดเลขเอง</Link></Button>
           {predictions.map((prediction) => {
@@ -114,7 +116,7 @@ export function TicketsPage({ userId }: { userId: string }) {
         <TabsContent value="tickets" className="space-y-4">
           <Card><CardHeader className="p-4 pb-2"><CardTitle className="text-base">เพิ่มสลากที่ซื้อจริง</CardTitle></CardHeader><CardContent><form onSubmit={submitTicket} className="space-y-3"><div className="space-y-2"><Label htmlFor="ticket-draw">งวด</Label><NativeSelect id="ticket-draw" value={drawId} disabled={!draws.some((draw) => draw.status === "scheduled")} onChange={(event) => setDrawId(event.target.value)}>{draws.some((draw) => draw.status === "scheduled") ? draws.filter((draw) => draw.status === "scheduled").map((draw) => <option key={draw.id} value={draw.id}>{dateLabel(draw.draw_date)}</option>) : <option value="">ยังไม่มีงวดที่เปิดรับสลาก</option>}</NativeSelect></div><div className="grid grid-cols-[1fr_82px] gap-3"><div className="space-y-2"><Label htmlFor="ticket-number">เลข 6 หลัก</Label><Input id="ticket-number" inputMode="numeric" maxLength={6} value={number} onChange={(event) => setNumber(event.target.value.replace(/\D/g, ""))} placeholder="123456" className="tabular-nums" /></div><div className="space-y-2"><Label htmlFor="ticket-quantity">จำนวนใบ</Label><Input id="ticket-quantity" type="number" min={1} max={100} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></div></div><div className="space-y-2"><Label htmlFor="ticket-visibility">ใครมองเห็นสลากนี้</Label><NativeSelect id="ticket-visibility" value={visibility} onChange={(event) => setVisibility(event.target.value as TicketVisibility)}><option value="private">เฉพาะฉัน (ค่าเริ่มต้น)</option><option value="followers">ผู้ติดตามเท่านั้น</option><option value="public">สาธารณะ</option></NativeSelect><p className="text-[11px] leading-5 text-muted-foreground">การติดตามไม่เปิดข้อมูลอัตโนมัติ คุณเป็นผู้เลือกแชร์สลากแต่ละใบเอง</p></div><Button type="submit" variant="gold" className="w-full" disabled={!drawId || saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Plus />} {saving ? "กำลังบันทึก..." : "บันทึกสลาก"}</Button>{message ? <Alert><AlertDescription>{message}</AlertDescription></Alert> : null}</form></CardContent></Card>
           {tickets.map((item) => <Card key={item.id}><CardContent className="p-4"><div className="flex items-center gap-3"><span className="flex size-11 items-center justify-center rounded-xl bg-secondary"><Ticket className="size-5 text-primary" /></span><div className="min-w-0 flex-1"><strong className="font-display text-xl tracking-[.15em] text-primary">{item.ticket_number}</strong><p className="text-[11px] text-muted-foreground">งวด {dateLabel(item.lottery_draws?.draw_date)} · {item.quantity} ใบ</p></div>{item.ticket_wins.length ? <CheckCircle2 className="size-5 text-success" /> : <Clock3 className="size-5 text-muted-foreground" />}</div><div className="mt-3 flex items-center gap-2 border-t border-border pt-3">{item.visibility === "private" ? <LockKeyhole className="size-4 text-muted-foreground" /> : item.visibility === "followers" ? <Users className="size-4 text-primary" /> : <Globe2 className="size-4 text-primary" />}<NativeSelect aria-label={`การมองเห็นสลาก ${item.ticket_number}`} className="h-9" value={item.visibility} onChange={(event) => void updateVisibility(item.id, event.target.value as TicketVisibility)}><option value="private">เฉพาะฉัน</option><option value="followers">ผู้ติดตามเท่านั้น</option><option value="public">สาธารณะ</option></NativeSelect></div></CardContent></Card>)}
-          {!tickets.length ? <Empty icon={Ticket} title="ยังไม่ได้บันทึกสลาก" detail="สแกนหรือกรอกเลข 6 หลัก เพื่อรวมการตรวจผลไว้ในหน้าเดียว" /> : null}
+          {!tickets.length ? <Empty icon={Ticket} title="ยังไม่ได้บันทึกสลาก" detail="กรอกเลขสลาก 6 หลักและเลือกงวด เพื่อเก็บไว้ตรวจผลในหน้าเดียว" /> : null}
         </TabsContent>
       </Tabs>
     </div>

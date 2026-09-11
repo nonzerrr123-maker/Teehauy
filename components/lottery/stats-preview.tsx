@@ -27,7 +27,7 @@ export function StatsPreview() {
     return () => { active = false; };
   }, []);
 
-  if (!stats && !failed) return <Card className="mb-7"><CardContent className="flex items-center gap-3 p-4 text-xs text-muted-foreground"><LoaderCircle className="size-4 animate-spin text-primary" /> กำลังตรวจข้อมูลผลรางวัลทางการ...</CardContent></Card>;
+  if (!stats && !failed) return <Card className="mb-7"><CardContent className="flex items-center gap-3 p-4 text-xs text-muted-foreground"><LoaderCircle className="size-4 animate-spin text-primary" /> กำลังโหลดข้อมูลผลรางวัลย้อนหลัง...</CardContent></Card>;
   if (failed) return <Card className="mb-7 border-destructive/20"><CardContent className="flex items-center gap-3 p-4"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-destructive/10 text-destructive"><RefreshCw className="size-5" /></span><div><strong className="text-sm">โหลดสถิติไม่สำเร็จ</strong><p className="mt-0.5 text-xs text-muted-foreground">แตะหน้าสถิติเพื่อลองเชื่อมต่อใหม่</p></div><Button asChild variant="ghost" size="icon" className="ml-auto"><Link href="/stats" aria-label="เปิดหน้าสถิติ"><ArrowRight /></Link></Button></CardContent></Card>;
 
   const latest = stats?.draws[0];

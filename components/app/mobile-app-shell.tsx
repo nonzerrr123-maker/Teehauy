@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/", label: "หน้าหลัก", icon: Home },
   { href: "/dreams", label: "คลังฝัน", icon: MoonStar },
-  { href: "/tickets", label: "สลากของฉัน", icon: TicketCheck },
+  { href: "/tickets", label: "ตรวจสลาก", icon: TicketCheck },
   { href: "/profile", label: "โปรไฟล์", icon: UserRound },
 ] as const;
 
