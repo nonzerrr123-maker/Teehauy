@@ -18,16 +18,23 @@ Applied migrations:
 - `20260910043550_harden_dream_publication_idempotency`: idempotent public dream and community post creation.
 - `20260910043906_consolidate_ticket_visibility_policies`: one consolidated read policy for ticket visibility.
 - `20260910105614_default_theme_system`: system theme default plus migration of untouched legacy defaults.
+- `20260910162323_support_dream_two_rankings`: stores six ranked two-digit dream numbers without changing locked historical predictions.
+- `20260911015513_add_ranlotto_primary_import`: RANLOTTO provenance fields and service-role-only full/subset imports.
+- `20260911021834_support_repeated_prize_slots`: preserves repeated historical winning numbers as separate prize slots.
+- `20260911022521_remove_unused_lottery_provider_index`: removes a provider-status index not used by the product query paths.
 
 Both Edge Functions require a valid JWT and an `admin` row in `user_roles`. Anonymous Auth and manual identity linking must be enabled in Auth settings; Google additionally needs the Google OAuth client credentials.
 
-## Official lottery provider
+## Lottery result provider
 
-The primary source is the Government Lottery Office (GLO) public dataset. Browser clients must not call it directly. From an authenticated admin account, use the `ingest-lottery-results` Edge Function with `{ "mode": "fetch_latest" }` for a complete draw, or `{ "mode": "fetch_history", "dates": ["2026-09-01"] }` to import the first, front-three, last-three, and last-two prizes used by statistics and analysis.
+The primary import source is [RANLOTTO Public API v1](https://www.ranlotto.com/developers). Browser clients call the Teehauy route handler rather than RANLOTTO directly. `RANLOTTO_API_KEY` is optional and must remain server-side.
 
-- Latest draw catalog: <https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01/resource/0846af20-af93-498c-91d9-644a885733f7>
-- Draw by date catalog: <https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01/resource/64b39af8-fd9a-4eab-87d4-9193768c3812>
-- Check ticket catalog: <https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01/resource/a4d750a4-f8a0-41f3-b62f-99ad97cd680a>
-- Latest endpoint: `POST https://www.glo.or.th/api/lottery/getLatestLottery`
+From an authenticated admin account, call `ingest-lottery-results` with:
 
-The importer rejects incomplete payloads unless all 173 prize entries and the draw date validate. It stores the raw payload checksum, then evaluates predictions/tickets only after the draw becomes `verified`. If GLO is unavailable or changes its response contract, normalize data from the official GLO PDF and submit it as an admin-verified payload; never fall back to an unverified third-party scraper.
+- `{ "mode": "fetch_latest" }` for the latest complete 173-entry result.
+- `{ "mode": "fetch_history", "dates": ["2026-09-01"] }` for up to 12 complete historical draws.
+- `{ "mode": "fetch_years", "years": [2023, 2024, 2025, 2026] }` for up to four years of analysis subsets per call.
+
+The importer validates schema-aware prize counts, digit lengths, the draw date, and a SHA-256 checksum. Provider provenance is preserved in `source_record_id` and `provider_verification_status`. Only `issuer_verified` full draws are promoted to `verified` and evaluated against saved tickets. Lower-assurance archive rows remain `published`; they never overwrite a stronger verified row.
+
+The manual normalized GLO payload path remains available as an emergency, admin-reviewed fallback. The RANLOTTO OpenAPI currently documents no QR/barcode endpoint or payload contract, so QR scanning is intentionally not implemented.

@@ -47,11 +47,11 @@ export function StatsPage() {
       <Card className="border-primary/15">
         <CardHeader className="flex flex-row items-start justify-between gap-3 p-4 pb-2">
           <div><CardTitle className="flex items-center gap-2 text-sm"><Database className="size-4 text-primary" /> แหล่งข้อมูล</CardTitle><p className="mt-1 text-xs leading-5 text-muted-foreground">{stats.sourceLabel}</p></div>
-          <Badge variant={hasDraws ? "default" : "secondary"}>{hasDraws ? "ข้อมูลทางการ" : "รอผล"}</Badge>
+          <Badge variant={hasDraws ? "default" : "secondary"}>{hasDraws ? `${stats.draws.length} งวด` : "รอผล"}</Badge>
         </CardHeader>
         <CardContent className="flex items-center justify-between gap-3 p-4 pt-2">
-          <p className="text-[11px] leading-4 text-muted-foreground">แสดงเฉพาะผลรางวัลที่ผ่านการตรวจสอบแล้ว</p>
-          <Button asChild variant="ghost" size="icon"><a href="https://gdcatalog.glo.or.th/dataset/dataset_c4-9_01" target="_blank" rel="noreferrer" aria-label="เปิดชุดข้อมูลสำนักงานสลากกินแบ่งรัฐบาล"><ExternalLink /></a></Button>
+          <p className="text-[11px] leading-4 text-muted-foreground">ยืนยันแล้ว {stats.verifiedDraws} งวด · คลังเผยแพร่ {stats.archiveDraws} งวด</p>
+          <Button asChild variant="ghost" size="icon"><a href="https://www.ranlotto.com/developers" target="_blank" rel="noreferrer" aria-label="เปิดเอกสารแหล่งข้อมูล RANLOTTO"><ExternalLink /></a></Button>
         </CardContent>
       </Card>
 
@@ -60,7 +60,8 @@ export function StatsPage() {
       <Tabs defaultValue="table">
         <TabsList><TabsTrigger value="table">ตารางผล</TabsTrigger><TabsTrigger value="chart" disabled={!hasDraws}>กราฟความถี่</TabsTrigger></TabsList>
         <TabsContent value="table" className="space-y-3">
-          {stats.draws.map((row) => <Card key={row.drawDate}><CardContent className="grid grid-cols-[1fr_auto_auto] items-center gap-4 p-4"><div><p className="text-[10px] text-muted-foreground">งวด {row.date}</p><strong className="mt-1 block font-display text-xl tracking-[.12em]">{row.first}</strong></div><ResultNumber label="2 ตัวบน" value={row.top} /><ResultNumber label="2 ตัวล่าง" value={row.bottom} accent /></CardContent></Card>)}
+          {stats.draws.slice(0, 60).map((row) => <Card key={row.drawDate}><CardContent className="grid grid-cols-[1fr_auto_auto] items-center gap-4 p-4"><div><p className="text-[10px] text-muted-foreground">งวด {row.date}</p><strong className="mt-1 block font-display text-xl tracking-[.12em]">{row.first}</strong></div><ResultNumber label="2 ตัวบน" value={row.top} /><ResultNumber label="2 ตัวล่าง" value={row.bottom} accent /></CardContent></Card>)}
+          {stats.draws.length > 60 ? <p className="px-2 text-center text-[11px] text-muted-foreground">ตารางแสดง 60 งวดล่าสุด ส่วนกราฟและการวิเคราะห์ใช้ข้อมูลย้อนหลังทั้ง {stats.draws.length} งวด</p> : null}
           {!hasDraws ? <Card><CardContent className="flex flex-col items-center py-14 text-center"><span className="mb-3 flex size-14 items-center justify-center rounded-full bg-secondary"><BarChart3 className="size-6 text-muted-foreground" /></span><strong className="text-sm">ยังไม่มีงวดที่พร้อมแสดง</strong><p className="mt-1 max-w-xs text-xs leading-5 text-muted-foreground">ระบบตั้งใจเว้นว่างจนกว่าจะมีข้อมูลทางการ เพื่อไม่ให้ผู้ใช้เข้าใจผิดว่าเป็นผลจริง</p></CardContent></Card> : null}
         </TabsContent>
         <TabsContent value="chart">
