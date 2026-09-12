@@ -58,8 +58,12 @@ describe("Markov diagnostics", () => {
   it("runs a deterministic walk-forward comparison", () => {
     const evaluation = buildMarkovEvaluation(draws, 20);
     expect(evaluation.validationDraws).toBe(60);
-    expect(evaluation.benchmark.map((item) => item.model)).toEqual(["uniform", "frequency", "decayed_frequency", "current", "digit_markov"]);
+    expect(evaluation.benchmark.map((item) => item.model)).toEqual(["uniform", "frequency", "decayed_frequency", "adaptive_decay", "current", "digit_markov"]);
     expect(evaluation.benchmark.find((item) => item.model === "digit_markov")?.hits).toBeTypeOf("number");
+    expect(evaluation.adaptiveDecayComparison).not.toBeNull();
+    expect(evaluation.halfLifeSelections).toHaveLength(3);
+    expect(evaluation.benchmark.filter((item) => !item.expected).every((item) => item.confidenceLow !== null && item.confidenceHigh !== null)).toBe(true);
+    expect(evaluation).toEqual(buildMarkovEvaluation(draws, 20));
   });
 
   it("handles the production-sized archive", () => {

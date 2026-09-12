@@ -60,16 +60,24 @@ function MarkovLab({ evaluation }: { evaluation: MarkovEvaluation }) {
   return (
     <Card className="border-primary/15">
       <CardHeader className="p-4 pb-2">
-        <div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2 text-sm"><FlaskConical className="size-4 text-primary" /> ห้องทดลอง Markov</CardTitle><p className="mt-1 text-[11px] leading-4 text-muted-foreground">ทดสอบรายหลักของ 2 ตัวบน 2 ตัวล่าง และ 3 ตัวบนแยกกัน</p></div><Badge variant={evaluation.markovEligible ? "default" : "secondary"}>{evaluation.markovEligible ? "ผ่านเกณฑ์ทดลอง" : "ยังไม่ใช้จริง"}</Badge></div>
+        <div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2 text-sm"><FlaskConical className="size-4 text-primary" /> ห้องทดลองแบบจำลอง</CardTitle><p className="mt-1 text-[11px] leading-4 text-muted-foreground">ทดสอบกับงวดที่ยังไม่ถูกใช้ฝึก และแยกชุดรางวัลออกจากกัน</p></div><Badge variant={evaluation.markovEligible || evaluation.adaptiveDecayEligible ? "default" : "secondary"}>{evaluation.markovEligible || evaluation.adaptiveDecayEligible ? "รอยืนยันเพิ่ม" : "ยังไม่เปลี่ยนโมเดล"}</Badge></div>
       </CardHeader>
       <CardContent className="space-y-4 p-4 pt-2">
-        <div className="rounded-xl bg-secondary/60 p-3"><div className="mb-1 flex items-center gap-2"><ShieldCheck className="size-4 text-primary" /><strong className="text-xs">ตรวจความสัมพันธ์ข้ามงวด</strong></div><p className="text-[11px] leading-5 text-muted-foreground">พบ {significant} จาก {evaluation.diagnostics.length} หลักที่ผ่านการปรับการทดสอบซ้ำ{strongest ? ` · ค่า q ต่ำสุด ${strongest.adjustedPValue.toFixed(4)}` : ""}</p></div>
+        <div className="rounded-xl bg-secondary/60 p-3"><div className="mb-1 flex items-center gap-2"><ShieldCheck className="size-4 text-primary" /><strong className="text-xs">Markov และความสัมพันธ์ข้ามงวด</strong></div><p className="text-[11px] leading-5 text-muted-foreground">พบ {significant} จาก {evaluation.diagnostics.length} หลักที่ผ่านการปรับการทดสอบซ้ำ{strongest ? ` · ค่า q ต่ำสุด ${strongest.adjustedPValue.toFixed(4)}` : ""}</p><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{evaluation.conclusion}</p></div>
         <div>
-          <div className="mb-2 flex items-end justify-between gap-3"><div><strong className="text-xs">Walk-forward Hit@6</strong><p className="mt-0.5 text-[10px] text-muted-foreground">ฝึกจากอดีต แล้วทายงวดถัดไปทีละงวด รวม {evaluation.validationDraws} การทดสอบ</p></div><span className="text-[9px] text-muted-foreground">สูงไม่ได้แปลว่าถูกงวดหน้า</span></div>
-          <div className="space-y-2">{evaluation.benchmark.map((item) => <div key={item.model} className="grid grid-cols-[9rem_1fr_auto] items-center gap-2 text-[10px]"><span className="truncate text-muted-foreground">{item.label}</span><span className="h-2 overflow-hidden rounded-full bg-secondary"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(2, (item.hitRate / maxRate) * 100)}%` }} /></span><strong className="w-12 text-right">{item.hitRate.toFixed(2)}%</strong></div>)}</div>
+          <div className="mb-2 flex items-end justify-between gap-3"><div><strong className="text-xs">Walk-forward Hit@6</strong><p className="mt-0.5 text-[10px] text-muted-foreground">ฝึกจากอดีต แล้วทายงวดถัดไปทีละงวด รวม {evaluation.validationDraws} การทดสอบ</p></div><span className="text-[9px] text-muted-foreground">ช่วงในวงเล็บคือ 95% CI</span></div>
+          <div className="space-y-2">{evaluation.benchmark.map((item) => <div key={item.model} className="grid grid-cols-[8.5rem_1fr_auto] items-center gap-2 text-[10px]"><span className="truncate text-muted-foreground">{item.label}</span><span className="h-2 overflow-hidden rounded-full bg-secondary"><span className="block h-full rounded-full bg-primary" style={{ width: `${Math.max(2, (item.hitRate / maxRate) * 100)}%` }} /></span><span className="w-[5.5rem] text-right"><strong>{item.hitRate.toFixed(2)}%</strong><small className="ml-1 text-[8px] text-muted-foreground">{item.confidenceLow === null ? "คาดหวัง" : `(${item.confidenceLow.toFixed(2)}–${item.confidenceHigh?.toFixed(2)})`}</small></span></div>)}</div>
         </div>
-        <p className="text-[11px] leading-5 text-muted-foreground">{evaluation.conclusion}</p>
+        {evaluation.adaptiveDecayComparison ? <div className="rounded-xl border border-border p-3"><strong className="text-xs">ตรวจโมเดลถ่วงน้ำหนักแบบจับคู่</strong><p className="mt-1 text-[11px] leading-5 text-muted-foreground">ต่างจากโมเดลเดิม {formatSigned(evaluation.adaptiveDecayComparison.differencePoints)} จุดเปอร์เซ็นต์ · 95% CI {formatSigned(evaluation.adaptiveDecayComparison.confidenceLow)} ถึง {formatSigned(evaluation.adaptiveDecayComparison.confidenceHigh)} · p={evaluation.adaptiveDecayComparison.pValue.toFixed(3)}</p><p className="mt-2 text-[10px] leading-4 text-muted-foreground">ช่วงที่เลือกหมายถึงจำนวนงวดที่น้ำหนักของข้อมูลเก่าจะลดเหลือครึ่งหนึ่ง</p><div className="mt-1.5 flex flex-wrap gap-1.5">{evaluation.halfLifeSelections.map((item) => <Badge key={item.series} variant="secondary">{seriesLabel(item.series)} {item.halfLife} งวด</Badge>)}</div><p className="mt-2 text-[10px] leading-4 text-muted-foreground">ดีขึ้น {evaluation.adaptiveDecayComparison.seriesImproved} จาก 3 ชุดรางวัล · {evaluation.decayConclusion}</p></div> : null}
       </CardContent>
     </Card>
   );
+}
+
+function formatSigned(value: number) {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+}
+
+function seriesLabel(series: "top" | "bottom" | "threeDigit") {
+  return series === "top" ? "2 ตัวบน" : series === "bottom" ? "2 ตัวล่าง" : "3 ตัวบน";
 }
