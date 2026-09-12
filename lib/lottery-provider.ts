@@ -25,15 +25,20 @@ type Draw = {
 
 export async function getLotteryStats(): Promise<LotteryStats> {
   const supabase = await createClient();
-  const response = await supabase
-    .from("lottery_draws")
-    .select("draw_date, status, source_name, result_scope, lottery_prizes(prize_type, winning_number)")
-    .in("status", ["published", "verified"])
-    .order("draw_date", { ascending: false })
-    .limit(1000);
-  if (response.error) throw response.error;
-
-  const rows = (response.data ?? []) as unknown as Draw[];
+  const pageSize = 1000;
+  const rows: Draw[] = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const response = await supabase
+      .from("lottery_draws")
+      .select("draw_date, status, source_name, result_scope, lottery_prizes(prize_type, winning_number)")
+      .in("status", ["published", "verified"])
+      .order("draw_date", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (response.error) throw response.error;
+    const page = (response.data ?? []) as unknown as Draw[];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
   const draws = rows.flatMap((row) => {
     const first = row.lottery_prizes.find((prize) => prize.prize_type === "first")?.winning_number;
     const bottom = row.lottery_prizes.find((prize) => prize.prize_type === "last_two")?.winning_number;
