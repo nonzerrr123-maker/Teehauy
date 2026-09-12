@@ -49,7 +49,7 @@ export function HomePage({ onInterpret, isLoading, error }: { onInterpret: (text
         <h2 className="mb-3 font-semibold">ทางลัดของคุณ</h2>
         <div className="grid grid-cols-2 gap-3">
           <QuickLink href="/tickets" icon={TicketCheck} title="สลากของฉัน" detail="รวมเลขและผลตรวจ" />
-          <QuickLink href="/analysis" icon={BarChart3} title="วิเคราะห์งวดหน้า" detail="ข้อมูลย้อนหลัง" />
+          <QuickLink href="/stats" icon={BarChart3} title="สถิติผลรางวัล" detail="ผลย้อนหลัง กราฟ และแนวโน้ม" />
           <QuickLink href="/community" icon={MessageCircle} title="ชุมชน" detail="ดูเลขจากสมาชิก" />
           <QuickLink href="/dreams" icon={BookHeart} title="ประวัติความฝัน" detail="ฝันและรายการโปรด" />
         </div>
