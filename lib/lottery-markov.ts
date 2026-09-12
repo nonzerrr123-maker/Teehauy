@@ -11,19 +11,43 @@ export type DependencyDiagnostic = {
 };
 
 export type BenchmarkResult = {
-  model: "uniform" | "frequency" | "decayed_frequency" | "current" | "digit_markov";
+  model: "uniform" | "frequency" | "decayed_frequency" | "adaptive_decay" | "current" | "digit_markov";
   label: string;
   hits: number | null;
   predictions: number;
   hitRate: number;
   expected: boolean;
+  confidenceLow: number | null;
+  confidenceHigh: number | null;
+};
+
+export type PairedModelComparison = {
+  challenger: "adaptive_decay";
+  baseline: "current";
+  differencePoints: number;
+  confidenceLow: number;
+  confidenceHigh: number;
+  pValue: number;
+  significant: boolean;
+  seriesImproved: number;
+};
+
+export type HalfLifeSelection = {
+  series: LotterySeries;
+  halfLife: number;
+  hits: number;
+  predictions: number;
 };
 
 export type MarkovEvaluation = {
   diagnostics: DependencyDiagnostic[];
   benchmark: BenchmarkResult[];
   markovEligible: boolean;
+  adaptiveDecayEligible: boolean;
+  adaptiveDecayComparison: PairedModelComparison | null;
+  halfLifeSelections: HalfLifeSelection[];
   conclusion: string;
+  decayConclusion: string;
   validationDraws: number;
 };
 
@@ -31,10 +55,14 @@ const SERIES: LotterySeries[] = ["top", "bottom", "threeDigit"];
 const MODEL_LABELS: Record<BenchmarkResult["model"], string> = {
   uniform: "สุ่มเท่ากัน",
   frequency: "ความถี่สะสม",
-  decayed_frequency: "ความถี่ถ่วงน้ำหนักล่าสุด",
+  decayed_frequency: "ถ่วงน้ำหนัก 24 งวด",
+  adaptive_decay: "ถ่วงน้ำหนักแบบเลือกช่วง",
   current: "โมเดล Teehauy ปัจจุบัน",
   digit_markov: "Markov รายหลัก",
 };
+
+// Keep the current experimental default first so tied validation scores choose the less surprising setting.
+const HALF_LIFE_OPTIONS = [24, 48, 12, 96, 6] as const;
 
 function sequencesForDraws(draws: LotteryDraw[]) {
   const ordered = [...draws].sort((a, b) => a.drawDate.localeCompare(b.drawDate));
@@ -147,11 +175,11 @@ function rankFrequency(training: string[], candidateValues: string[]) {
   return topValues(candidateValues, (value) => counts.get(value) ?? 0);
 }
 
-function rankDecayedFrequency(training: string[], candidateValues: string[]) {
+function rankDecayedFrequency(training: string[], candidateValues: string[], halfLife = 24) {
   const scores = new Map<string, number>();
   const newestIndex = training.length - 1;
   training.forEach((value, index) => {
-    const weight = 0.5 ** ((newestIndex - index) / 24);
+    const weight = 0.5 ** ((newestIndex - index) / halfLife);
     scores.set(value, (scores.get(value) ?? 0) + weight);
   });
   return topValues(candidateValues, (value) => scores.get(value) ?? 0);
@@ -178,18 +206,52 @@ function rankDigitMarkov(training: string[], candidateValues: string[]) {
   }, 1));
 }
 
-function evaluateSequence(values: string[], minimumTraining: number) {
+type SequenceOutcome = {
+  key: string;
+  drawIndex: number;
+  series: LotterySeries;
+  hits: { frequency: boolean; decayed_frequency: boolean; adaptive_decay: boolean; digit_markov: boolean };
+};
+
+function bestHalfLife(hitHistory: Map<number, boolean[]>, windowSize: number) {
+  return HALF_LIFE_OPTIONS.reduce((best, halfLife) => {
+    const hits = (hitHistory.get(halfLife) ?? []).slice(-windowSize).filter(Boolean).length;
+    return hits > best.hits ? { halfLife, hits } : best;
+  }, { halfLife: HALF_LIFE_OPTIONS[0] as number, hits: -1 });
+}
+
+function evaluateSequence(series: LotterySeries, values: string[], minimumTraining: number) {
   if (values.length <= minimumTraining) return null;
   const candidateValues = candidates(values[0].length);
-  const hits = { frequency: 0, decayed_frequency: 0, digit_markov: 0 };
-  for (let index = minimumTraining; index < values.length; index += 1) {
+  const innerMinimum = Math.max(12, Math.floor(minimumTraining / 2));
+  const halfLifeHistory = new Map<number, boolean[]>(HALF_LIFE_OPTIONS.map((halfLife) => [halfLife, []]));
+  const outcomes: SequenceOutcome[] = [];
+  for (let index = innerMinimum; index < values.length; index += 1) {
     const training = values.slice(0, index);
     const target = values[index];
-    if (rankFrequency(training, candidateValues).has(target)) hits.frequency += 1;
-    if (rankDecayedFrequency(training, candidateValues).has(target)) hits.decayed_frequency += 1;
-    if (rankDigitMarkov(training, candidateValues).has(target)) hits.digit_markov += 1;
+    const halfLifePredictions = new Map<number, Set<string>>(HALF_LIFE_OPTIONS.map((halfLife) => [halfLife, rankDecayedFrequency(training, candidateValues, halfLife)]));
+    if (index >= minimumTraining) {
+      const adaptiveHalfLife = bestHalfLife(halfLifeHistory, minimumTraining).halfLife;
+      outcomes.push({
+        key: `${series}:${index}`,
+        drawIndex: index,
+        series,
+        hits: {
+          frequency: rankFrequency(training, candidateValues).has(target),
+          decayed_frequency: halfLifePredictions.get(24)?.has(target) ?? false,
+          adaptive_decay: halfLifePredictions.get(adaptiveHalfLife)?.has(target) ?? false,
+          digit_markov: rankDigitMarkov(training, candidateValues).has(target),
+        },
+      });
+    }
+    HALF_LIFE_OPTIONS.forEach((halfLife) => halfLifeHistory.get(halfLife)?.push(halfLifePredictions.get(halfLife)?.has(target) ?? false));
   }
-  return { hits, predictions: values.length - minimumTraining, candidateCount: candidateValues.length };
+  const selected = bestHalfLife(halfLifeHistory, minimumTraining);
+  return {
+    outcomes,
+    candidateCount: candidateValues.length,
+    selection: { series, halfLife: selected.halfLife, hits: selected.hits, predictions: Math.min(minimumTraining, halfLifeHistory.get(selected.halfLife)?.length ?? 0) } satisfies HalfLifeSelection,
+  };
 }
 
 function evaluateCurrentModel(draws: LotteryDraw[], minimumTraining: number) {
@@ -219,44 +281,146 @@ function evaluateCurrentModel(draws: LotteryDraw[], minimumTraining: number) {
   const threeDigitCandidates = candidates(3);
   let hits = 0;
   let predictions = 0;
+  const outcomes = new Map<string, boolean>();
   for (let index = minimumTraining; index < ordered.length; index += 1) {
     const twoDigit = rank(twoDigitState, twoDigitCandidates, 2, index - 1);
     const threeDigit = rank(threeDigitState, threeDigitCandidates, 3, index - 1);
-    if (twoDigit.has(ordered[index].top)) hits += 1;
-    if (twoDigit.has(ordered[index].bottom)) hits += 1;
-    if (threeDigit.has(ordered[index].threeDigit[0])) hits += 1;
+    const topHit = twoDigit.has(ordered[index].top);
+    const bottomHit = twoDigit.has(ordered[index].bottom);
+    const threeDigitHit = threeDigit.has(ordered[index].threeDigit[0]);
+    outcomes.set(`top:${index}`, topHit);
+    outcomes.set(`bottom:${index}`, bottomHit);
+    outcomes.set(`threeDigit:${index}`, threeDigitHit);
+    hits += Number(topHit) + Number(bottomHit) + Number(threeDigitHit);
     predictions += 3;
     addValues(twoDigitState, [ordered[index].top, ordered[index].bottom], index);
     addValues(threeDigitState, ordered[index].threeDigit, index);
   }
-  return { hits, predictions };
+  return { hits, predictions, outcomes };
+}
+
+function percentile(sorted: number[], probability: number) {
+  if (sorted.length === 0) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.floor(probability * (sorted.length - 1))))];
+}
+
+function clusteredHitInterval(outcomes: SequenceOutcome[], isHit: (outcome: SequenceOutcome) => boolean, seed: number) {
+  if (outcomes.length === 0) return { low: 0, high: 0 };
+  const byDraw = new Map<number, { hits: number; samples: number }>();
+  outcomes.forEach((outcome) => {
+    const cluster = byDraw.get(outcome.drawIndex) ?? { hits: 0, samples: 0 };
+    cluster.hits += Number(isHit(outcome));
+    cluster.samples += 1;
+    byDraw.set(outcome.drawIndex, cluster);
+  });
+  const clusters = [...byDraw.values()];
+  const random = seededRandom(seed);
+  const bootstrap: number[] = [];
+  for (let run = 0; run < 1999; run += 1) {
+    let hits = 0;
+    let samples = 0;
+    for (let index = 0; index < clusters.length; index += 1) {
+      const sampled = clusters[Math.floor(random() * clusters.length)];
+      hits += sampled.hits;
+      samples += sampled.samples;
+    }
+    bootstrap.push((hits / samples) * 100);
+  }
+  bootstrap.sort((a, b) => a - b);
+  return { low: Number(percentile(bootstrap, 0.025).toFixed(2)), high: Number(percentile(bootstrap, 0.975).toFixed(2)) };
+}
+
+function compareAdaptiveDecay(outcomes: SequenceOutcome[], currentOutcomes: Map<string, boolean>): PairedModelComparison | null {
+  if (outcomes.length === 0) return null;
+  const byDraw = new Map<number, { difference: number; samples: number }>();
+  const bySeries = new Map<LotterySeries, { challenger: number; baseline: number; samples: number }>();
+  outcomes.forEach((outcome) => {
+    const challenger = Number(outcome.hits.adaptive_decay);
+    const baseline = Number(currentOutcomes.get(outcome.key) ?? false);
+    const draw = byDraw.get(outcome.drawIndex) ?? { difference: 0, samples: 0 };
+    draw.difference += challenger - baseline;
+    draw.samples += 1;
+    byDraw.set(outcome.drawIndex, draw);
+    const series = bySeries.get(outcome.series) ?? { challenger: 0, baseline: 0, samples: 0 };
+    series.challenger += challenger;
+    series.baseline += baseline;
+    series.samples += 1;
+    bySeries.set(outcome.series, series);
+  });
+  const clusters = [...byDraw.values()];
+  const totalDifference = clusters.reduce((sum, cluster) => sum + cluster.difference, 0);
+  const totalSamples = clusters.reduce((sum, cluster) => sum + cluster.samples, 0);
+  const differencePoints = (totalDifference / totalSamples) * 100;
+  const random = seededRandom(8675309);
+  const bootstrap: number[] = [];
+  for (let run = 0; run < 1999; run += 1) {
+    let difference = 0;
+    let samples = 0;
+    for (let index = 0; index < clusters.length; index += 1) {
+      const sampled = clusters[Math.floor(random() * clusters.length)];
+      difference += sampled.difference;
+      samples += sampled.samples;
+    }
+    bootstrap.push((difference / samples) * 100);
+  }
+  bootstrap.sort((a, b) => a - b);
+  let atLeastObserved = 0;
+  const observedMagnitude = Math.abs(totalDifference);
+  for (let run = 0; run < 4999; run += 1) {
+    const permuted = clusters.reduce((sum, cluster) => sum + (random() < 0.5 ? -cluster.difference : cluster.difference), 0);
+    if (Math.abs(permuted) >= observedMagnitude) atLeastObserved += 1;
+  }
+  const pValue = (atLeastObserved + 1) / 5000;
+  const confidenceLow = percentile(bootstrap, 0.025);
+  const confidenceHigh = percentile(bootstrap, 0.975);
+  const seriesImproved = [...bySeries.values()].filter((series) => series.challenger / series.samples > series.baseline / series.samples).length;
+  return {
+    challenger: "adaptive_decay",
+    baseline: "current",
+    differencePoints: Number(differencePoints.toFixed(2)),
+    confidenceLow: Number(confidenceLow.toFixed(2)),
+    confidenceHigh: Number(confidenceHigh.toFixed(2)),
+    pValue: Number(pValue.toFixed(4)),
+    significant: pValue < 0.05 && confidenceLow > 0,
+    seriesImproved,
+  };
 }
 
 export function buildMarkovEvaluation(draws: LotteryDraw[], minimumTraining = 120): MarkovEvaluation {
   const diagnostics = buildDependencyDiagnostics(draws);
-  const evaluations = sequencesForDraws(draws).flatMap(({ values }) => {
-    const evaluation = evaluateSequence(values, minimumTraining);
+  const evaluations = sequencesForDraws(draws).flatMap(({ series, values }) => {
+    const evaluation = evaluateSequence(series, values, minimumTraining);
     return evaluation ? [evaluation] : [];
   });
-  const predictions = evaluations.reduce((sum, item) => sum + item.predictions, 0);
+  const outcomes = evaluations.flatMap((item) => item.outcomes);
+  const predictions = outcomes.length;
   const currentEvaluation = evaluateCurrentModel(draws, minimumTraining);
-  const models: Exclude<BenchmarkResult["model"], "uniform">[] = ["frequency", "decayed_frequency", "current", "digit_markov"];
-  const benchmark: BenchmarkResult[] = models.map((model) => {
-    const hits = model === "current" ? currentEvaluation.hits : evaluations.reduce((sum, item) => sum + item.hits[model], 0);
-    return { model, label: MODEL_LABELS[model], hits, predictions, hitRate: predictions ? Number(((hits / predictions) * 100).toFixed(2)) : 0, expected: false };
+  const models: Exclude<BenchmarkResult["model"], "uniform">[] = ["frequency", "decayed_frequency", "adaptive_decay", "current", "digit_markov"];
+  const benchmark: BenchmarkResult[] = models.map((model, modelIndex) => {
+    const hits = model === "current" ? currentEvaluation.hits : outcomes.filter((outcome) => outcome.hits[model]).length;
+    const confidence = clusteredHitInterval(outcomes, (outcome) => model === "current" ? (currentEvaluation.outcomes.get(outcome.key) ?? false) : outcome.hits[model], 41041 + modelIndex * 997);
+    return { model, label: MODEL_LABELS[model], hits, predictions, hitRate: predictions ? Number(((hits / predictions) * 100).toFixed(2)) : 0, expected: false, confidenceLow: confidence.low, confidenceHigh: confidence.high };
   });
-  const expectedHits = evaluations.reduce((sum, item) => sum + item.predictions * (6 / item.candidateCount), 0);
-  benchmark.unshift({ model: "uniform", label: MODEL_LABELS.uniform, hits: null, predictions, hitRate: predictions ? Number(((expectedHits / predictions) * 100).toFixed(2)) : 0, expected: true });
+  const expectedHits = evaluations.reduce((sum, item) => sum + item.outcomes.length * (6 / item.candidateCount), 0);
+  benchmark.unshift({ model: "uniform", label: MODEL_LABELS.uniform, hits: null, predictions, hitRate: predictions ? Number(((expectedHits / predictions) * 100).toFixed(2)) : 0, expected: true, confidenceLow: null, confidenceHigh: null });
 
   const markov = benchmark.find((item) => item.model === "digit_markov");
   const bestBaseline = Math.max(...benchmark.filter((item) => !["uniform", "digit_markov"].includes(item.model)).map((item) => item.hitRate), 0);
   const hasDependencyEvidence = diagnostics.some((item) => item.adjustedPValue < 0.05);
   const requiredImprovement = Math.max(0.5, bestBaseline * 0.1);
   const markovEligible = Boolean(markov && predictions > 0 && hasDependencyEvidence && markov.hitRate >= bestBaseline + requiredImprovement);
+  const adaptiveDecayComparison = compareAdaptiveDecay(outcomes, currentEvaluation.outcomes);
+  const adaptiveDecayEligible = Boolean(adaptiveDecayComparison?.significant && adaptiveDecayComparison.seriesImproved >= 2);
+  const halfLifeSelections = evaluations.map((item) => item.selection);
   const conclusion = predictions === 0
     ? "ข้อมูลยังไม่พอสำหรับทดสอบแบบเดินหน้า"
     : markovEligible
       ? "Markov รายหลักผ่านทั้งการตรวจความสัมพันธ์และผลทดสอบย้อนหลัง ควรยืนยันซ้ำก่อนเปิดใช้จริง"
       : "ยังไม่มีหลักฐานนอกกลุ่มตัวอย่างเพียงพอให้แทนโมเดลปัจจุบัน จึงคง Markov ไว้เป็นการทดลอง";
-  return { diagnostics, benchmark, markovEligible, conclusion, validationDraws: predictions };
+  const decayConclusion = !adaptiveDecayComparison
+    ? "ข้อมูลยังไม่พอสำหรับเปรียบเทียบโมเดลแบบจับคู่"
+    : adaptiveDecayEligible
+      ? "โมเดลถ่วงน้ำหนักผ่าน paired test และดีขึ้นอย่างสม่ำเสมอ ควรตรวจ holdout เพิ่มก่อนสลับ production"
+      : "ผลของโมเดลถ่วงน้ำหนักยังแยกจากความผันผวนไม่ได้ จึงยังไม่เปลี่ยนโมเดล production";
+  return { diagnostics, benchmark, markovEligible, adaptiveDecayEligible, adaptiveDecayComparison, halfLifeSelections, conclusion, decayConclusion, validationDraws: predictions };
 }
